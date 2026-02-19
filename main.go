@@ -9,6 +9,12 @@ import (
 	"google.golang.org/genai"
 )
 
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
 	var (
 		namespace    string
@@ -20,8 +26,9 @@ func main() {
 	)
 
 	rootCmd := &cobra.Command{
-		Use:   "kaddons",
-		Short: "Kubernetes addon compatibility checker",
+		Use:     "kaddons",
+		Version: version,
+		Short:   "Kubernetes addon compatibility checker",
 		Long:           "Discovers addons installed in a Kubernetes cluster and checks their compatibility with the cluster's Kubernetes version using Gemini AI.",
 		SilenceUsage:   true,
 		SilenceErrors:  true,

@@ -4,16 +4,55 @@ Kubernetes addon compatibility checker. Works with any Kubernetes cluster (EKS, 
 
 ## Prerequisites
 
-- Go 1.23+
 - `kubectl` configured with access to a Kubernetes cluster
 - A [Gemini API key](https://aistudio.google.com/apikey)
 
+### Install prerequisites
+
+**macOS (Homebrew):**
+
+```bash
+brew install kubectl
+```
+
+**Linux:**
+
+```bash
+# kubectl (see https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/)
+curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+```
+
 ## Install
+
+### Homebrew (macOS/Linux)
+
+```bash
+brew install qbandev/tap/kaddons
+```
+
+### Go install
+
+Requires Go 1.23+:
+
+```bash
+go install github.com/qbandev/kaddons@latest
+```
+
+### Build from source
 
 ```bash
 git clone https://github.com/qbandev/kaddons.git
 cd kaddons
 make build
+# Binary is at ./kaddons
+```
+
+### Move to PATH (optional)
+
+```bash
+sudo make install
+# Installs to /usr/local/bin/kaddons
 ```
 
 ## Usage
