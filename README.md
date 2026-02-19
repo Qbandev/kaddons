@@ -145,6 +145,27 @@ export GEMINI_API_KEY=your-key-here
 └────────────────────┴──────────────────┴─────────────────────┴──────┴────────────┴─────────┴──────────────────────────────────────────────────────────────┘
 ```
 
+## Link Checker
+
+The `linkcheck` subcommand checks all URLs in the addon database for broken links. No API key or cluster access required.
+
+```bash
+# Check all addon URLs
+./kaddons linkcheck
+```
+
+If all links are healthy, it prints a confirmation and exits with code 0. If broken links are found, it prints a Markdown table and exits with code 1:
+
+```
+Found **3** broken links across **2** addons.
+
+| Addon Name | Field | URL | Status |
+|------------|-------|-----|--------|
+| ExampleAddon | project_url | https://example.com/dead | HTTP 404 |
+```
+
+A [GitHub Actions workflow](.github/workflows/linkcheck.yml) runs this check weekly (Mondays 08:00 UTC) and creates or updates a GitHub issue labeled `broken-links` when broken links are found.
+
 ## How It Works
 
 kaddons uses a **Plan-and-Execute** architecture with three phases:
@@ -205,9 +226,18 @@ Covers 35 categories from the CNCF Landscape and non-CNCF ecosystem including in
 ## Project Structure
 
 ```
-main.go       CLI entrypoint (Cobra), flag parsing, Gemini client init
-agent.go      Plan-and-Execute pipeline: discovery, enrichment, LLM analysis
-tools.go      Cluster interaction: kubectl commands, HTTP fetching, label parsing
-addons.go     Embedded addon database (go:embed), lookup/matching logic
-output.go     JSON and box-drawing table output formatting
+main.go          CLI entrypoint (Cobra), flag parsing, Gemini client init
+agent.go         Plan-and-Execute pipeline: discovery, enrichment, LLM analysis
+tools.go         Cluster interaction: kubectl commands, HTTP fetching, label parsing
+addons.go        Embedded addon database (go:embed), lookup/matching logic
+output.go        JSON and box-drawing table output formatting
+linkcheck.go     URL health checker subcommand (concurrent HEAD/GET checks)
+*_test.go        Unit tests for link checking, addon lookup, chart parsing, output
+.github/workflows/linkcheck.yml   Weekly broken link check (creates GitHub issues)
+```
+
+## Testing
+
+```bash
+go test -v ./...
 ```

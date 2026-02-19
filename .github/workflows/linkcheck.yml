@@ -1,0 +1,56 @@
+name: Weekly Link Check
+
+on:
+  schedule:
+    - cron: "0 8 * * 1" # Every Monday at 08:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  linkcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: true
+
+      - name: Run link checker
+        id: check
+        run: |
+          set -euo pipefail
+          go run . linkcheck > report.md || true
+          if grep -q "^All links are healthy" report.md; then
+            echo "broken=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "broken=true" >> "$GITHUB_OUTPUT"
+          fi
+          cat report.md
+
+      - name: Create or update issue
+        if: steps.check.outputs.broken == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TITLE="Broken links in k8s_universal_addons.json"
+          LABEL="broken-links"
+
+          # Ensure label exists
+          gh label create "$LABEL" --description "Automated broken link reports" --color "d93f0b" 2>/dev/null || true
+
+          BODY="$(cat report.md)"$'\n\n'"_Last checked: $(date -u '+%Y-%m-%d %H:%M UTC')_"
+
+          EXISTING=$(gh issue list --label "$LABEL" --state open --json number --jq '.[0].number // empty')
+
+          if [ -n "$EXISTING" ]; then
+            gh issue edit "$EXISTING" --body "$BODY"
+            echo "Updated issue #$EXISTING"
+          else
+            gh issue create --title "$TITLE" --label "$LABEL" --body "$BODY"
+          fi

@@ -65,6 +65,8 @@ func main() {
 	rootCmd.Flags().StringVar(&model, "model", "gemini-3-flash-preview", "Gemini model to use")
 	rootCmd.Flags().StringVarP(&output, "output", "o", "json", "Output format: json or table")
 
+	rootCmd.AddCommand(newLinkcheckCmd())
+
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
