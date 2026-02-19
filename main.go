@@ -12,10 +12,11 @@ import (
 func main() {
 	var (
 		namespace    string
-		eksVersion   string
+		k8sVersion   string
 		addonsFilter string
 		apiKey       string
 		model        string
+		output       string
 	)
 
 	rootCmd := &cobra.Command{
@@ -25,6 +26,10 @@ func main() {
 		SilenceUsage:   true,
 		SilenceErrors:  true,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if output != "json" && output != "table" {
+				return fmt.Errorf("invalid output format %q: must be json or table", output)
+			}
+
 			key := apiKey
 			if key == "" {
 				key = os.Getenv("GEMINI_API_KEY")
@@ -42,15 +47,16 @@ func main() {
 				return fmt.Errorf("creating Gemini client: %w", err)
 			}
 
-			return runAgent(ctx, client, model, namespace, eksVersion, addonsFilter)
+			return runAgent(ctx, client, model, namespace, k8sVersion, addonsFilter, output)
 		},
 	}
 
 	rootCmd.Flags().StringVar(&namespace, "namespace", "", "Kubernetes namespace filter (empty for all namespaces)")
-	rootCmd.Flags().StringVar(&eksVersion, "eks", "", "EKS/K8s version override (e.g. 1.29)")
+	rootCmd.Flags().StringVar(&k8sVersion, "k8s-version", "", "Kubernetes version override (e.g. 1.30)")
 	rootCmd.Flags().StringVar(&addonsFilter, "addons", "", "Comma-separated addon name filter")
 	rootCmd.Flags().StringVar(&apiKey, "api-key", "", "Gemini API key (overrides GEMINI_API_KEY env)")
-	rootCmd.Flags().StringVar(&model, "model", "gemini-3-flash", "Gemini model to use")
+	rootCmd.Flags().StringVar(&model, "model", "gemini-3-flash-preview", "Gemini model to use")
+	rootCmd.Flags().StringVarP(&output, "output", "o", "json", "Output format: json or table")
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)

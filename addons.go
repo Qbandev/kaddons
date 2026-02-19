@@ -42,10 +42,17 @@ func lookupAddon(name string, addons []Addon) []Addon {
 		}
 	}
 
-	// Substring match
+	// Skip substring matching for very short or generic names
+	if len(lower) < 4 {
+		return nil
+	}
+
+	// Match where the detected name IS the DB name (case-insensitive) or
+	// the DB name starts with the detected name followed by a separator
 	var matches []Addon
 	for _, a := range addons {
-		if strings.Contains(strings.ToLower(a.Name), lower) {
+		dbLower := strings.ToLower(a.Name)
+		if strings.HasPrefix(dbLower, lower+" ") || strings.HasPrefix(dbLower, lower+"-") {
 			matches = append(matches, a)
 		}
 	}

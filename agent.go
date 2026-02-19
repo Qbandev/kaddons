@@ -2,167 +2,185 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
 	"google.golang.org/genai"
 )
 
-const maxIterations = 20
-
-func buildSystemPrompt(eksVersion string, addonsFilter string) string {
-	var sb strings.Builder
-	sb.WriteString(`You are a Kubernetes addon compatibility analyzer. Your job is to determine whether addons installed in a cluster are compatible with the cluster's Kubernetes version.
-
-Follow these steps:
-
-`)
-	if eksVersion != "" {
-		sb.WriteString(fmt.Sprintf("1. The cluster Kubernetes version is: %s (provided by user, skip get_cluster_version)\n", eksVersion))
-	} else {
-		sb.WriteString("1. Call get_cluster_version to determine the cluster's Kubernetes version\n")
-	}
-
-	if addonsFilter != "" {
-		sb.WriteString(fmt.Sprintf("2. The user wants to check these specific addons: %s. Still call list_installed_addons to get their installed versions and namespaces.\n", addonsFilter))
-	} else {
-		sb.WriteString("2. Call list_installed_addons to discover all addons in the cluster\n")
-	}
-
-	sb.WriteString(`3. For each addon found:
-   a. Call lookup_addon_info with the addon name to find its metadata
-   b. If a compatibility_matrix_url is found, call check_compatibility_url to fetch the page
-   c. Analyze the fetched page content to determine if the addon version is compatible with the cluster's Kubernetes version
-4. Produce your final output as a strict JSON array (no markdown code fences, no extra text) with this schema for each addon:
-   {
-     "name": "addon-name",
-     "namespace": "namespace",
-     "installed_version": "v1.2.3",
-     "eks_version": "1.29",
-     "compatible": true|false|null,
-     "latest_compatible_version": "v1.2.5",
-     "compatibility_source": "https://...",
-     "note": "optional note"
-   }
-   - "compatible" must be null if you cannot determine compatibility
-   - "note" should explain ambiguity or errors
-   - Only include "latest_compatible_version" and "compatibility_source" if you found them
-
-`)
-	if addonsFilter != "" {
-		sb.WriteString("Only include the requested addons in the output. If a requested addon is not found in the cluster, include it with compatible: null and a note explaining it was not found.\n")
-	}
-
-	return sb.String()
-}
-
-func runAgent(ctx context.Context, client *genai.Client, model string, namespace string, eksVersion string, addonsFilter string) error {
-	addons, err := loadAddons()
+func runAgent(ctx context.Context, client *genai.Client, model string, namespace string, k8sVersionOverride string, addonsFilter string, outputFormat string) error {
+	addonDB, err := loadAddons()
 	if err != nil {
 		return fmt.Errorf("loading addon database: %w", err)
 	}
 
-	tools := allTools(namespace, addons)
-	decls := toolDeclarations(tools)
-	byName := toolsByName(tools)
-
-	systemPrompt := buildSystemPrompt(eksVersion, addonsFilter)
-
-	config := &genai.GenerateContentConfig{
-		SystemInstruction: genai.NewContentFromText(systemPrompt, genai.RoleUser),
-		Tools: []*genai.Tool{
-			{FunctionDeclarations: decls},
-		},
-	}
-
-	chat, err := client.Chats.Create(ctx, model, config, nil)
-	if err != nil {
-		return fmt.Errorf("creating chat session: %w", err)
-	}
-
-	userMsg := "Analyze the Kubernetes cluster and determine addon compatibility. Produce a JSON compatibility report."
-	if addonsFilter != "" {
-		userMsg = fmt.Sprintf("Check compatibility for these addons: %s. Produce a JSON compatibility report.", addonsFilter)
-	}
-
-	resp, err := chat.SendMessage(ctx, genai.Part{Text: userMsg})
-	if err != nil {
-		return fmt.Errorf("sending initial message: %w", err)
-	}
-
-	for i := 0; i < maxIterations; i++ {
-		functionCalls := extractFunctionCalls(resp)
-		if len(functionCalls) == 0 {
-			printTextResponse(resp)
-			return nil
-		}
-
-		var responseParts []genai.Part
-		for _, fc := range functionCalls {
-			tool, ok := byName[fc.Name]
-			if !ok {
-				responseParts = append(responseParts, genai.Part{
-					FunctionResponse: &genai.FunctionResponse{
-						Name:     fc.Name,
-						Response: map[string]any{"error": fmt.Sprintf("unknown tool: %s", fc.Name)},
-					},
-				})
-				continue
-			}
-
-			result, err := tool.Run(ctx, fc.Args)
-			if err != nil {
-				result = map[string]any{"error": err.Error()}
-			}
-
-			responseParts = append(responseParts, genai.Part{
-				FunctionResponse: &genai.FunctionResponse{
-					Name:     fc.Name,
-					Response: result,
-				},
-			})
-		}
-
-		resp, err = chat.SendMessage(ctx, responseParts...)
+	// Phase 1: Deterministic data collection (no LLM involved)
+	fmt.Fprintln(os.Stderr, "Detecting cluster version...")
+	k8sVersion := k8sVersionOverride
+	if k8sVersion == "" {
+		v, err := getClusterVersion(ctx)
 		if err != nil {
-			return fmt.Errorf("sending function responses (iteration %d): %w", i, err)
+			return fmt.Errorf("getting cluster version: %w", err)
 		}
+		k8sVersion = v
+	}
+	fmt.Fprintf(os.Stderr, "Cluster version: %s\n", k8sVersion)
+
+	fmt.Fprintln(os.Stderr, "Discovering installed addons...")
+	detected, err := listInstalledAddons(ctx, namespace)
+	if err != nil {
+		return fmt.Errorf("listing installed addons: %w", err)
 	}
 
-	return fmt.Errorf("agent loop exceeded maximum iterations (%d)", maxIterations)
-}
-
-func extractFunctionCalls(resp *genai.GenerateContentResponse) []*genai.FunctionCall {
-	var calls []*genai.FunctionCall
-	if resp == nil {
-		return calls
+	// Apply addon filter if specified
+	if addonsFilter != "" {
+		filters := strings.Split(addonsFilter, ",")
+		filterSet := make(map[string]bool, len(filters))
+		for _, f := range filters {
+			filterSet[strings.TrimSpace(strings.ToLower(f))] = true
+		}
+		var filtered []detectedAddon
+		for _, a := range detected {
+			if filterSet[strings.ToLower(a.Name)] {
+				filtered = append(filtered, a)
+			}
+		}
+		detected = filtered
 	}
-	for _, cand := range resp.Candidates {
-		if cand.Content == nil {
+	fmt.Fprintf(os.Stderr, "Discovered %d workloads\n", len(detected))
+
+	// Phase 2: Match addons against DB, deduplicate by addon name (prefer entry with version)
+	type enrichedEntry struct {
+		info    addonWithInfo
+		dbName  string
+	}
+	bestByName := make(map[string]enrichedEntry)
+	for _, a := range detected {
+		matches := lookupAddon(a.Name, addonDB)
+		if len(matches) == 0 {
 			continue
 		}
-		for _, part := range cand.Content.Parts {
-			if part.FunctionCall != nil {
-				calls = append(calls, part.FunctionCall)
-			}
+
+		dbName := strings.ToLower(matches[0].Name)
+		existing, exists := bestByName[dbName]
+		if exists && existing.info.Version != "" && a.Version == "" {
+			continue // keep the one with a version
+		}
+
+		bestByName[dbName] = enrichedEntry{
+			info: addonWithInfo{
+				detectedAddon: a,
+				DBMatch:       &matches[0],
+			},
+			dbName: dbName,
 		}
 	}
-	return calls
+
+	// Phase 3: Fetch compatibility pages for matched addons
+	enriched := make([]addonWithInfo, 0, len(bestByName))
+	fetchedURLs := make(map[string]string) // cache: URL -> content
+	for _, entry := range bestByName {
+		info := entry.info
+		if info.DBMatch.CompatibilityMatrixURL != "" {
+			info.CompatibilityURL = info.DBMatch.CompatibilityMatrixURL
+			if cached, ok := fetchedURLs[info.CompatibilityURL]; ok {
+				info.CompatibilityContent = cached
+			} else {
+				fmt.Fprintf(os.Stderr, "Fetching compatibility page for %s...\n", info.Name)
+				content, err := fetchCompatibilityPage(ctx, info.DBMatch.CompatibilityMatrixURL)
+				if err != nil {
+					info.FetchError = err.Error()
+				} else {
+					info.CompatibilityContent = content
+					fetchedURLs[info.CompatibilityURL] = content
+				}
+			}
+		}
+		enriched = append(enriched, info)
+	}
+
+	fmt.Fprintf(os.Stderr, "Matched %d known addons\n", len(enriched))
+	if len(enriched) == 0 {
+		return formatOutput("[]", outputFormat)
+	}
+
+	// Phase 3: LLM analysis — single call with all data pre-collected
+	fmt.Fprintln(os.Stderr, "Analyzing compatibility...")
+	return analyzeCompatibility(ctx, client, model, k8sVersion, enriched, outputFormat)
 }
 
-func printTextResponse(resp *genai.GenerateContentResponse) {
-	if resp == nil {
-		return
+const analysisSystemPrompt = `You are a Kubernetes addon compatibility analyzer. You will receive pre-collected data about addons installed in a cluster, including their compatibility matrix page content when available.
+
+Your ONLY job is to analyze the provided data and determine compatibility. You must produce a strict JSON array (no markdown code fences, no extra text before or after) with this schema for EACH addon provided:
+
+{
+  "name": "addon-name",
+  "namespace": "namespace",
+  "installed_version": "v1.2.3",
+  "k8s_version": "1.29",
+  "compatible": true|false|null,
+  "latest_compatible_version": "v1.2.5",
+  "compatibility_source": "https://...",
+  "note": "brief explanation"
+}
+
+Rules:
+- You MUST include ALL addons from the input — do not skip any
+- "compatible" must be null if you cannot determine compatibility from the provided data
+- "note" should be a brief explanation of your analysis
+- Only include "latest_compatible_version" if you found evidence in the compatibility page
+- "compatibility_source" should be the URL of the compatibility page if one was provided
+- Base your analysis ONLY on the page content provided — do not hallucinate compatibility information`
+
+func analyzeCompatibility(ctx context.Context, client *genai.Client, model string, k8sVersion string, addons []addonWithInfo, outputFormat string) error {
+	// Build the data payload for the LLM
+	dataPayload := struct {
+		K8sVersion string          `json:"k8s_version"`
+		Addons     []addonWithInfo `json:"addons"`
+	}{
+		K8sVersion: k8sVersion,
+		Addons:     addons,
 	}
+
+	dataJSON, err := json.MarshalIndent(dataPayload, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling addon data: %w", err)
+	}
+
+	config := &genai.GenerateContentConfig{
+		SystemInstruction: genai.NewContentFromText(analysisSystemPrompt, genai.RoleUser),
+	}
+
+	resp, err := client.Models.GenerateContent(ctx, model, []*genai.Content{
+		genai.NewContentFromText(
+			fmt.Sprintf("Analyze compatibility for these addons:\n\n%s", string(dataJSON)),
+			genai.RoleUser,
+		),
+	}, config)
+	if err != nil {
+		return fmt.Errorf("LLM analysis failed: %w", err)
+	}
+
+	raw := collectTextResponse(resp)
+	return formatOutput(extractJSON(raw), outputFormat)
+}
+
+func collectTextResponse(resp *genai.GenerateContentResponse) string {
+	if resp == nil {
+		return ""
+	}
+	var sb strings.Builder
 	for _, cand := range resp.Candidates {
 		if cand.Content == nil {
 			continue
 		}
 		for _, part := range cand.Content.Parts {
 			if part.Text != "" {
-				fmt.Print(part.Text)
+				sb.WriteString(part.Text)
 			}
 		}
 	}
-	fmt.Println()
+	return sb.String()
 }
