@@ -1,5 +1,5 @@
-kaddons
-kaddons-validate
+/kaddons
+/kaddons-validate
 .env
 .claude/
 *.exe
