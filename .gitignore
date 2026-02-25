@@ -1,4 +1,8 @@
 kaddons
-linkcheck
+kaddons-validate
 .env
+.claude/
 *.exe
+dist/
+.gocache/
+.gopath/

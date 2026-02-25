@@ -140,7 +140,7 @@
       "name": "Keptn",
       "project_url": "https://keptn.sh/",
       "repository": "https://github.com/keptn/lifecycle-toolkit",
-      "compatibility_matrix_url": "https://lifecycle.keptn.sh/docs/installation/",
+      "compatibility_matrix_url": "https://v1.keptn.sh/docs/0.10.x/operate/k8s_support/",
       "changelog_location": "https://github.com/keptn/lifecycle-toolkit/releases",
       "upgrade_path_type": "Helm-driven"
     },
@@ -164,7 +164,7 @@
       "name": "Jenkins X",
       "project_url": "https://jenkins-x.io/",
       "repository": "https://github.com/jenkins-x/jx",
-      "compatibility_matrix_url": "https://jenkins-x.io/v3/admin/platforms/",
+      "compatibility_matrix_url": "https://jenkins-x.io/v3/admin/guides/k8s-upgrades/",
       "changelog_location": "https://github.com/jenkins-x/jx/releases",
       "upgrade_path_type": "Manual-manifest"
     },
@@ -220,7 +220,7 @@
       "name": "Spinnaker",
       "project_url": "https://spinnaker.io/",
       "repository": "https://github.com/spinnaker/spinnaker",
-      "compatibility_matrix_url": "https://spinnaker.io/docs/setup/install/",
+      "compatibility_matrix_url": "https://docs.armory.io/continuous-deployment/feature-status/continuous-deployment-matrix/",
       "changelog_location": "https://spinnaker.io/changelogs/",
       "upgrade_path_type": "Manual-manifest"
     },
@@ -364,7 +364,7 @@
       "name": "Akri",
       "project_url": "https://docs.akri.sh/",
       "repository": "https://github.com/project-akri/akri",
-      "compatibility_matrix_url": "https://docs.akri.sh/community/roadmap",
+      "compatibility_matrix_url": "https://docs.akri.sh/user-guide/cluster-setup",
       "changelog_location": "https://github.com/project-akri/akri/releases",
       "upgrade_path_type": "Helm-driven"
     },
@@ -404,7 +404,7 @@
       "name": "AWS EFS CSI Driver",
       "project_url": "https://github.com/kubernetes-sigs/aws-efs-csi-driver",
       "repository": "https://github.com/kubernetes-sigs/aws-efs-csi-driver",
-      "compatibility_matrix_url": "https://github.com/kubernetes-sigs/aws-efs-csi-driver/blob/master/docs/README.md",
+      "compatibility_matrix_url": "https://github.com/kubernetes-sigs/aws-efs-csi-driver/blob/master/docs/compatibility.md",
       "changelog_location": "https://github.com/kubernetes-sigs/aws-efs-csi-driver/releases",
       "upgrade_path_type": "Helm-driven"
     },
@@ -1196,7 +1196,7 @@
       "name": "Prometheus Operator / kube-prometheus-stack",
       "project_url": "https://prometheus-operator.dev/",
       "repository": "https://github.com/prometheus-operator/prometheus-operator",
-      "compatibility_matrix_url": "https://github.com/prometheus-operator/prometheus-operator#prerequisites",
+      "compatibility_matrix_url": "https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack",
       "changelog_location": "https://github.com/prometheus-operator/prometheus-operator/releases",
       "upgrade_path_type": "Helm-driven"
     },
@@ -1356,7 +1356,7 @@
       "name": "Elastic/Elasticsearch",
       "project_url": "https://www.elastic.co/",
       "repository": "https://github.com/elastic/elasticsearch",
-      "compatibility_matrix_url": "https://www.elastic.co/support/matrix#matrix_kubernetes",
+      "compatibility_matrix_url": "https://www.elastic.co/guide/en/cloud-on-k8s/2.16/k8s-supported.html",
       "changelog_location": "https://github.com/elastic/elasticsearch/releases",
       "upgrade_path_type": "Operator-managed"
     },
@@ -1956,7 +1956,7 @@
       "name": "Beats",
       "project_url": "https://www.elastic.co/beats",
       "repository": "https://github.com/elastic/beats",
-      "compatibility_matrix_url": "https://www.elastic.co/support/matrix#matrix_kubernetes",
+      "compatibility_matrix_url": "https://www.elastic.co/guide/en/cloud-on-k8s/2.16/k8s-supported.html",
       "changelog_location": "https://github.com/elastic/beats/releases",
       "upgrade_path_type": "Helm-driven"
     },
@@ -1996,7 +1996,7 @@
       "name": "Cortex",
       "project_url": "https://cortexmetrics.io/",
       "repository": "https://github.com/cortexproject/cortex",
-      "compatibility_matrix_url": "https://cortexmetrics.io/docs/guides/kubernetes/",
+      "compatibility_matrix_url": "https://cortexmetrics.io/docs/guides/running-cortex-on-kubernetes/",
       "changelog_location": "https://github.com/cortexproject/cortex/blob/master/CHANGELOG.md",
       "upgrade_path_type": "Helm-driven"
     },
@@ -2020,7 +2020,7 @@
       "name": "Elastic",
       "project_url": "https://www.elastic.co/",
       "repository": "https://github.com/elastic/elasticsearch",
-      "compatibility_matrix_url": "https://www.elastic.co/support/matrix#matrix_kubernetes",
+      "compatibility_matrix_url": "https://www.elastic.co/guide/en/cloud-on-k8s/2.16/k8s-supported.html",
       "changelog_location": "https://github.com/elastic/elasticsearch/releases",
       "upgrade_path_type": "Operator-managed"
     },
@@ -2028,7 +2028,7 @@
       "name": "Elastic APM",
       "project_url": "https://www.elastic.co/observability/application-performance-monitoring",
       "repository": "https://github.com/elastic/apm-server",
-      "compatibility_matrix_url": "https://www.elastic.co/support/matrix#matrix_kubernetes",
+      "compatibility_matrix_url": "https://www.elastic.co/guide/en/cloud-on-k8s/2.16/k8s-supported.html",
       "changelog_location": "https://github.com/elastic/apm-server/releases",
       "upgrade_path_type": "Operator-managed"
     },
@@ -2180,7 +2180,7 @@
       "name": "Jaeger",
       "project_url": "https://www.jaegertracing.io/",
       "repository": "https://github.com/jaegertracing/jaeger",
-      "compatibility_matrix_url": "https://www.jaegertracing.io/docs/latest/operator/#kubernetes-compatibility",
+      "compatibility_matrix_url": "https://github.com/jaegertracing/jaeger-operator/blob/main/COMPATIBILITY.md",
       "changelog_location": "https://github.com/jaegertracing/jaeger/releases",
       "upgrade_path_type": "Operator-managed"
     },
@@ -2276,7 +2276,7 @@
       "name": "Logstash",
       "project_url": "https://www.elastic.co/logstash",
       "repository": "https://github.com/elastic/logstash",
-      "compatibility_matrix_url": "https://www.elastic.co/support/matrix#matrix_kubernetes",
+      "compatibility_matrix_url": "https://www.elastic.co/guide/en/cloud-on-k8s/2.16/k8s-supported.html",
       "changelog_location": "https://github.com/elastic/logstash/releases",
       "upgrade_path_type": "Helm-driven"
     },
@@ -2386,7 +2386,7 @@
     },
     {
       "name": "OpenObserve",
-      "project_url": "http://openobserve.ai/",
+      "project_url": "https://openobserve.ai/",
       "repository": "https://github.com/openobserve/openobserve",
       "compatibility_matrix_url": "https://openobserve.ai/docs/quickstart/#kubernetes",
       "changelog_location": "https://github.com/openobserve/openobserve/releases",
@@ -2402,7 +2402,7 @@
     },
     {
       "name": "OpenTSDB",
-      "project_url": "http://opentsdb.net/",
+      "project_url": "https://opentsdb.net/",
       "repository": "https://github.com/OpenTSDB/opentsdb",
       "compatibility_matrix_url": "https://github.com/OpenTSDB/opentsdb/blob/master/README.md",
       "changelog_location": "https://github.com/OpenTSDB/opentsdb/releases",
@@ -2412,7 +2412,7 @@
       "name": "OpenTelemetry",
       "project_url": "https://opentelemetry.io/",
       "repository": "https://github.com/open-telemetry/community",
-      "compatibility_matrix_url": "https://opentelemetry.io/docs/kubernetes/operator/compatibility/",
+      "compatibility_matrix_url": "https://github.com/open-telemetry/opentelemetry-operator/blob/main/docs/compatibility.md",
       "changelog_location": "https://github.com/open-telemetry/opentelemetry-collector/releases",
       "upgrade_path_type": "Operator-managed"
     },
@@ -2460,7 +2460,7 @@
       "name": "Prometheus",
       "project_url": "https://prometheus.io/",
       "repository": "https://github.com/prometheus/prometheus",
-      "compatibility_matrix_url": "https://prometheus.io/docs/prometheus/latest/compatibility/",
+      "compatibility_matrix_url": "https://prometheus-operator.dev/docs/getting-started/compatibility/",
       "changelog_location": "https://github.com/prometheus/prometheus/releases",
       "upgrade_path_type": "Helm-driven"
     },
@@ -3028,7 +3028,7 @@
       "name": "Argo CD",
       "project_url": "https://argo-cd.readthedocs.io/",
       "repository": "https://github.com/argoproj/argo-cd",
-      "compatibility_matrix_url": "https://argo-cd.readthedocs.io/en/stable/operator-manual/installation/#supported-versions",
+      "compatibility_matrix_url": "https://argo-cd.readthedocs.io/en/stable/operator-manual/installation/#tested-versions",
       "changelog_location": "https://github.com/argoproj/argo-cd/releases",
       "upgrade_path_type": "Helm-driven"
     },
@@ -3051,8 +3051,8 @@
     {
       "name": "Lens",
       "project_url": "https://k8slens.dev/",
-      "repository": "https://github.com/MuhammedKalworworked/lens",
-      "compatibility_matrix_url": "https://docs.k8slens.dev/getting-started/install-lens/#system-requirements",
+      "repository": "https://github.com/lensapp/lens",
+      "compatibility_matrix_url": "https://docs.k8slens.dev/k8slens/getting-started/install-lens/",
       "changelog_location": "https://github.com/lensapp/lens/releases",
       "upgrade_path_type": "Manual-manifest"
     },
@@ -3260,7 +3260,7 @@
       "name": "CoHDI",
       "project_url": "https://github.com/CoHDI",
       "repository": "https://github.com/CoHDI",
-      "compatibility_matrix_url": "https://github.com/CoHDI",
+      "compatibility_matrix_url": "https://github.com/CoHDI/composable-resource-operator",
       "changelog_location": "https://github.com/CoHDI",
       "upgrade_path_type": "Manual-manifest"
     },
@@ -3548,7 +3548,7 @@
       "name": "Consul",
       "project_url": "https://www.consul.io/",
       "repository": "https://github.com/hashicorp/consul",
-      "compatibility_matrix_url": "https://developer.hashicorp.com/consul/docs/k8s/compatibility",
+      "compatibility_matrix_url": "https://developer.hashicorp.com/consul/docs/upgrade/k8s/compatibility",
       "changelog_location": "https://github.com/hashicorp/consul/blob/main/CHANGELOG.md",
       "upgrade_path_type": "Helm-driven"
     },
@@ -3596,7 +3596,7 @@
       "name": "Linkerd",
       "project_url": "https://linkerd.io/",
       "repository": "https://github.com/linkerd/linkerd2",
-      "compatibility_matrix_url": "https://linkerd.io/releases/",
+      "compatibility_matrix_url": "https://linkerd.io/2-edge/reference/k8s-versions/",
       "changelog_location": "https://github.com/linkerd/linkerd2/releases",
       "upgrade_path_type": "Helm-driven"
     },
@@ -4092,7 +4092,7 @@
       "name": "Falco",
       "project_url": "https://falco.org/",
       "repository": "https://github.com/falcosecurity/falco",
-      "compatibility_matrix_url": "https://falco.org/docs/supported-fields/",
+      "compatibility_matrix_url": "https://falco.org/docs/setup/kubernetes/",
       "changelog_location": "https://github.com/falcosecurity/falco/releases",
       "upgrade_path_type": "Helm-driven"
     },
@@ -4204,7 +4204,7 @@
       "name": "NeuVector",
       "project_url": "https://neuvector.com/",
       "repository": "https://github.com/neuvector/neuvector",
-      "compatibility_matrix_url": "https://open-docs.neuvector.com/basics/requirements",
+      "compatibility_matrix_url": "https://www.suse.com/suse-neuvector/support-matrix/all-supported-versions/neuvector-v-all-versions/",
       "changelog_location": "https://github.com/neuvector/neuvector/releases",
       "upgrade_path_type": "Helm-driven"
     },
@@ -4786,7 +4786,7 @@
     },
     {
       "name": "Curve",
-      "project_url": "http://www.opencurve.io/",
+      "project_url": "https://www.opencurve.io/",
       "repository": "https://github.com/opencurve/curve",
       "compatibility_matrix_url": "https://github.com/opencurve/curve/blob/master/docs/cn/deploy.md",
       "changelog_location": "https://github.com/opencurve/curve/releases",
@@ -5140,7 +5140,7 @@
       "name": "HashiCorp Vault",
       "project_url": "https://www.vaultproject.io/",
       "repository": "https://github.com/hashicorp/vault",
-      "compatibility_matrix_url": "https://developer.hashicorp.com/vault/docs/platform/k8s/helm#supported-configurations",
+      "compatibility_matrix_url": "https://developer.hashicorp.com/vault/docs/deploy/kubernetes/helm",
       "changelog_location": "https://github.com/hashicorp/vault/blob/main/CHANGELOG.md",
       "upgrade_path_type": "Helm-driven"
     },
@@ -5311,10 +5311,42 @@
       "compatibility_matrix_url": "https://docs.testkube.io/articles/install/overview",
       "changelog_location": "https://github.com/kubeshop/testkube/releases",
       "upgrade_path_type": "Helm-driven"
+    },
+    {
+      "name": "kube-proxy",
+      "project_url": "https://kubernetes.io/docs/reference/command-line-tools-reference/kube-proxy/",
+      "repository": "https://github.com/kubernetes/kubernetes",
+      "compatibility_matrix_url": "https://kubernetes.io/releases/",
+      "changelog_location": "https://github.com/kubernetes/kubernetes/releases",
+      "upgrade_path_type": "Cluster-managed"
+    },
+    {
+      "name": "Prometheus Node Exporter",
+      "project_url": "https://prometheus.io/docs/guides/node-exporter/",
+      "repository": "https://github.com/prometheus/node_exporter",
+      "compatibility_matrix_url": "https://github.com/prometheus/node_exporter#readme",
+      "changelog_location": "https://github.com/prometheus/node_exporter/releases",
+      "upgrade_path_type": "Helm-driven"
+    },
+    {
+      "name": "Redis",
+      "project_url": "https://redis.io/",
+      "repository": "https://github.com/redis/redis",
+      "compatibility_matrix_url": "https://github.com/bitnami/charts/tree/main/bitnami/redis",
+      "changelog_location": "https://github.com/redis/redis/releases",
+      "upgrade_path_type": "Helm-driven"
+    },
+    {
+      "name": "AWS Network Policy Agent",
+      "project_url": "https://github.com/aws/aws-network-policy-agent",
+      "repository": "https://github.com/aws/aws-network-policy-agent",
+      "compatibility_matrix_url": "https://github.com/aws/aws-network-policy-agent#readme",
+      "changelog_location": "https://github.com/aws/aws-network-policy-agent/releases",
+      "upgrade_path_type": "Cluster-managed"
     }
   ],
   "metadata": {
-    "total_count": 664,
+    "total_count": 668,
     "generated_date": "2026-02-13",
     "source": "CNCF Landscape + non-CNCF ecosystem research",
     "categories_covered": [

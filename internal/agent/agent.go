@@ -1,4 +1,4 @@
-package main
+package agent
 
 import (
 	"context"
@@ -7,20 +7,42 @@ import (
 	"os"
 	"strings"
 
+	"github.com/qbandev/kaddons/internal/addon"
+	"github.com/qbandev/kaddons/internal/cluster"
+	"github.com/qbandev/kaddons/internal/fetch"
+	"github.com/qbandev/kaddons/internal/output"
 	"google.golang.org/genai"
 )
 
-func runAgent(ctx context.Context, client *genai.Client, model string, namespace string, k8sVersionOverride string, addonsFilter string, outputFormat string) error {
-	addonDB, err := loadAddons()
+type addonWithInfo struct {
+	cluster.DetectedAddon
+	DBMatch              *addon.Addon     `json:"db_match,omitempty"`
+	CompatibilityContent string           `json:"compatibility_content,omitempty"`
+	CompatibilityURL     string           `json:"compatibility_url,omitempty"`
+	FetchError           string           `json:"fetch_error,omitempty"`
+	EOLData              []addon.EOLCycle `json:"eol_data,omitempty"`
+}
+
+// Run executes the Plan-and-Execute pipeline.
+func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addonsFilter, outputFormat string) error {
+	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+		APIKey:  apiKey,
+		Backend: genai.BackendGeminiAPI,
+	})
+	if err != nil {
+		return fmt.Errorf("creating Gemini client: %w", err)
+	}
+
+	addonDB, err := addon.LoadAddons()
 	if err != nil {
 		return fmt.Errorf("loading addon database: %w", err)
 	}
 
 	// Phase 1: Deterministic data collection (no LLM involved)
-	fmt.Fprintln(os.Stderr, "Detecting cluster version...")
 	k8sVersion := k8sVersionOverride
 	if k8sVersion == "" {
-		v, err := getClusterVersion(ctx)
+		fmt.Fprintln(os.Stderr, "Detecting cluster version...")
+		v, err := cluster.GetClusterVersion(ctx)
 		if err != nil {
 			return fmt.Errorf("getting cluster version: %w", err)
 		}
@@ -28,8 +50,7 @@ func runAgent(ctx context.Context, client *genai.Client, model string, namespace
 	}
 	fmt.Fprintf(os.Stderr, "Cluster version: %s\n", k8sVersion)
 
-	fmt.Fprintln(os.Stderr, "Discovering installed addons...")
-	detected, err := listInstalledAddons(ctx, namespace)
+	detected, err := cluster.ListInstalledAddons(ctx, namespace)
 	if err != nil {
 		return fmt.Errorf("listing installed addons: %w", err)
 	}
@@ -41,7 +62,7 @@ func runAgent(ctx context.Context, client *genai.Client, model string, namespace
 		for _, f := range filters {
 			filterSet[strings.TrimSpace(strings.ToLower(f))] = true
 		}
-		var filtered []detectedAddon
+		var filtered []cluster.DetectedAddon
 		for _, a := range detected {
 			if filterSet[strings.ToLower(a.Name)] {
 				filtered = append(filtered, a)
@@ -53,12 +74,12 @@ func runAgent(ctx context.Context, client *genai.Client, model string, namespace
 
 	// Phase 2: Match addons against DB, deduplicate by addon name (prefer entry with version)
 	type enrichedEntry struct {
-		info    addonWithInfo
-		dbName  string
+		info   addonWithInfo
+		dbName string
 	}
 	bestByName := make(map[string]enrichedEntry)
 	for _, a := range detected {
-		matches := lookupAddon(a.Name, addonDB)
+		matches := addon.LookupAddon(a.Name, addonDB)
 		if len(matches) == 0 {
 			continue
 		}
@@ -71,14 +92,17 @@ func runAgent(ctx context.Context, client *genai.Client, model string, namespace
 
 		bestByName[dbName] = enrichedEntry{
 			info: addonWithInfo{
-				detectedAddon: a,
+				DetectedAddon: a,
 				DBMatch:       &matches[0],
 			},
 			dbName: dbName,
 		}
 	}
 
-	// Phase 3: Fetch compatibility pages for matched addons
+	fmt.Fprintf(os.Stderr, "Matched %d known addons\n", len(bestByName))
+
+	// Fetch compatibility pages and EOL data for matched addons
+	fmt.Fprintf(os.Stderr, "Enriching %d addons...\n", len(bestByName))
 	enriched := make([]addonWithInfo, 0, len(bestByName))
 	fetchedURLs := make(map[string]string) // cache: URL -> content
 	for _, entry := range bestByName {
@@ -88,8 +112,7 @@ func runAgent(ctx context.Context, client *genai.Client, model string, namespace
 			if cached, ok := fetchedURLs[info.CompatibilityURL]; ok {
 				info.CompatibilityContent = cached
 			} else {
-				fmt.Fprintf(os.Stderr, "Fetching compatibility page for %s...\n", info.Name)
-				content, err := fetchCompatibilityPage(ctx, info.DBMatch.CompatibilityMatrixURL)
+				content, err := fetch.CompatibilityPage(ctx, info.DBMatch.CompatibilityMatrixURL)
 				if err != nil {
 					info.FetchError = err.Error()
 				} else {
@@ -98,16 +121,22 @@ func runAgent(ctx context.Context, client *genai.Client, model string, namespace
 				}
 			}
 		}
+		if slug, ok := addon.LookupEOLSlug(info.Name); ok {
+			cycles, err := fetch.EOLData(ctx, slug)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: EOL data fetch failed for %s: %v\n", info.Name, err)
+			} else {
+				info.EOLData = cycles
+			}
+		}
 		enriched = append(enriched, info)
 	}
-
-	fmt.Fprintf(os.Stderr, "Matched %d known addons\n", len(enriched))
 	if len(enriched) == 0 {
-		return formatOutput("[]", outputFormat)
+		return output.FormatOutput("[]", k8sVersion, outputFormat)
 	}
 
 	// Phase 3: LLM analysis — single call with all data pre-collected
-	fmt.Fprintln(os.Stderr, "Analyzing compatibility...")
+	fmt.Fprintf(os.Stderr, "Analyzing with %s...\n", model)
 	return analyzeCompatibility(ctx, client, model, k8sVersion, enriched, outputFormat)
 }
 
@@ -119,23 +148,28 @@ Your ONLY job is to analyze the provided data and determine compatibility. You m
   "name": "addon-name",
   "namespace": "namespace",
   "installed_version": "v1.2.3",
-  "k8s_version": "1.29",
-  "compatible": true|false|null,
+  "compatible": "true"|"false"|"unknown",
   "latest_compatible_version": "v1.2.5",
-  "compatibility_source": "https://...",
-  "note": "brief explanation"
+  "note": "explanation with source citation, upgrade status, and support dates"
 }
+
+You MUST use exact strings "true", "false", or "unknown" — not boolean literals or null.
 
 Rules:
 - You MUST include ALL addons from the input — do not skip any
-- "compatible" must be null if you cannot determine compatibility from the provided data
-- "note" should be a brief explanation of your analysis
-- Only include "latest_compatible_version" if you found evidence in the compatibility page
-- "compatibility_source" should be the URL of the compatibility page if one was provided
-- Base your analysis ONLY on the page content provided — do not hallucinate compatibility information`
+- "compatible" must be "unknown" if you cannot determine compatibility from the provided data
+- Only include "latest_compatible_version" if you found evidence in the compatibility page or EOL data
+
+Notes (source-cited, comprehensive):
+- "note" must cite the source URL and include all relevant context in a single field
+- Include the compatibility source URL citation: e.g. "The compatibility matrix at <URL> states v1.14 supports K8s 1.24-1.31."
+- When determinable from eol_data, include the supported-until date: e.g. "Supported until 2025-09-10."
+- When the installed version is confirmed incompatible, state upgrade-required status: e.g. "Upgrade required: <URL> states v0.14.x only supports K8s 1.32."
+- If the compatibility page lacks structured version data, explain what the page contained: e.g. "The page at <URL> is an installation guide without a version compatibility matrix."
+- If eol_data is provided, use it to determine version support status and latest version. Prefer the compatibility page for K8s-specific compatibility; use EOL data as supplementary context for version lifecycle
+- Base your analysis ONLY on the page content and EOL data provided — do not hallucinate compatibility information`
 
 func analyzeCompatibility(ctx context.Context, client *genai.Client, model string, k8sVersion string, addons []addonWithInfo, outputFormat string) error {
-	// Build the data payload for the LLM
 	dataPayload := struct {
 		K8sVersion string          `json:"k8s_version"`
 		Addons     []addonWithInfo `json:"addons"`
@@ -164,7 +198,25 @@ func analyzeCompatibility(ctx context.Context, client *genai.Client, model strin
 	}
 
 	raw := collectTextResponse(resp)
-	return formatOutput(extractJSON(raw), outputFormat)
+	extracted := output.ExtractJSON(raw)
+
+	var results []output.AddonCompatibility
+	if err := json.Unmarshal([]byte(extracted), &results); err == nil {
+		var compatible, incompatible, unknown int
+		for _, r := range results {
+			switch r.Compatible {
+			case output.StatusTrue:
+				compatible++
+			case output.StatusFalse:
+				incompatible++
+			default:
+				unknown++
+			}
+		}
+		fmt.Fprintf(os.Stderr, "Done: %d compatible, %d incompatible, %d unknown\n", compatible, incompatible, unknown)
+	}
+
+	return output.FormatOutput(extracted, k8sVersion, outputFormat)
 }
 
 func collectTextResponse(resp *genai.GenerateContentResponse) string {

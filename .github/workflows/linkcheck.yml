@@ -13,22 +13,29 @@ jobs:
   linkcheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5.3.0
         with:
-          go-version: stable
+          go-version: '1.25.7'
           cache: true
 
       - name: Run link checker
         id: check
         run: |
           set -euo pipefail
-          go run . linkcheck > report.md || true
-          if grep -q "^All links are healthy" report.md; then
+          set +e
+          go run ./cmd/kaddons-validate --links > report.md
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
             echo "broken=false" >> "$GITHUB_OUTPUT"
-          else
+          elif [ "$status" -eq 1 ]; then
             echo "broken=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Link checker runtime failure (exit $status)"
+            cat report.md
+            exit "$status"
           fi
           cat report.md
 

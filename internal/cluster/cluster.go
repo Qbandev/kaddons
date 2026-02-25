@@ -1,35 +1,25 @@
-package main
+package cluster
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
+	"os"
 	"os/exec"
-	"regexp"
 	"strings"
-	"time"
 )
 
-type detectedAddon struct {
+// DetectedAddon represents a workload discovered from the cluster.
+type DetectedAddon struct {
 	Name      string `json:"name"`
 	Namespace string `json:"namespace"`
 	Version   string `json:"version"`
 	Source    string `json:"source"`
 }
 
-type addonWithInfo struct {
-	detectedAddon
-	DBMatch              *Addon `json:"db_match,omitempty"`
-	CompatibilityContent string `json:"compatibility_content,omitempty"`
-	CompatibilityURL     string `json:"compatibility_url,omitempty"`
-	FetchError           string `json:"fetch_error,omitempty"`
-}
-
-// getClusterVersion runs kubectl version and returns major.minor string.
-func getClusterVersion(ctx context.Context) (string, error) {
-	out, err := exec.CommandContext(ctx, "kubectl", "version", "--output=json").Output()
+// GetClusterVersion runs kubectl version and returns major.minor string.
+func GetClusterVersion(ctx context.Context) (string, error) {
+	out, err := exec.CommandContext(ctx, "kubectl", "version", "--output=json").Output() // #nosec G204 -- kubectl is a well-known binary, not user-controlled input
 	if err != nil {
 		return "", fmt.Errorf("kubectl version failed: %w", err)
 	}
@@ -48,8 +38,8 @@ func getClusterVersion(ctx context.Context) (string, error) {
 	return fmt.Sprintf("%s.%s", ver.ServerVersion.Major, minor), nil
 }
 
-// listInstalledAddons discovers addons from the cluster deterministically.
-func listInstalledAddons(ctx context.Context, namespace string) ([]detectedAddon, error) {
+// ListInstalledAddons discovers addons from the cluster deterministically.
+func ListInstalledAddons(ctx context.Context, namespace string) ([]DetectedAddon, error) {
 	var nsFlag []string
 	if namespace != "" {
 		nsFlag = []string{"-n", namespace}
@@ -72,11 +62,11 @@ func listInstalledAddons(ctx context.Context, namespace string) ([]detectedAddon
 	}
 
 	seen := make(map[string]bool)
-	var addons []detectedAddon
+	var addons []DetectedAddon
 
 	for _, q := range queries {
 		cmdArgs := append([]string{"get", q.resource, "-o", "json"}, nsFlag...)
-		out, err := exec.CommandContext(ctx, "kubectl", cmdArgs...).Output()
+		out, err := exec.CommandContext(ctx, "kubectl", cmdArgs...).Output() // #nosec G204 -- kubectl is a well-known binary, not user-controlled input
 		if err != nil {
 			if q.isCRD {
 				continue
@@ -107,6 +97,7 @@ func listInstalledAddons(ctx context.Context, namespace string) ([]detectedAddon
 			} `json:"items"`
 		}
 		if err := json.Unmarshal(out, &list); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: skipping %s due to unexpected kubectl JSON output: %v\n", q.resource, err)
 			continue
 		}
 
@@ -149,7 +140,7 @@ func listInstalledAddons(ctx context.Context, namespace string) ([]detectedAddon
 			}
 			seen[key] = true
 
-			addons = append(addons, detectedAddon{
+			addons = append(addons, DetectedAddon{
 				Name:      name,
 				Namespace: item.Metadata.Namespace,
 				Version:   version,
@@ -159,38 +150,6 @@ func listInstalledAddons(ctx context.Context, namespace string) ([]detectedAddon
 	}
 
 	return addons, nil
-}
-
-var htmlTagRe = regexp.MustCompile(`<[^>]*>`)
-var whitespaceRe = regexp.MustCompile(`\s+`)
-
-// fetchCompatibilityPage fetches a URL and returns stripped text content.
-func fetchCompatibilityPage(ctx context.Context, url string) (string, error) {
-	client := &http.Client{Timeout: 15 * time.Second}
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return "", fmt.Errorf("creating request: %w", err)
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("HTTP request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("reading response body: %w", err)
-	}
-
-	text := htmlTagRe.ReplaceAllString(string(body), " ")
-	text = whitespaceRe.ReplaceAllString(text, " ")
-
-	if len(text) > 30000 {
-		text = text[:30000]
-	}
-
-	return text, nil
 }
 
 func stripChartVersion(chart string) string {

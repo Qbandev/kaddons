@@ -2,6 +2,7 @@ version: 2
 
 builds:
   - id: kaddons
+    main: ./cmd/kaddons
     binary: kaddons
     env:
       - CGO_ENABLED=0
