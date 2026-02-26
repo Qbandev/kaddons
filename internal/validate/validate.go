@@ -19,9 +19,21 @@ import (
 // ErrValidationFailed is returned when one or more validation checks fail.
 var ErrValidationFailed = errors.New("validation failed")
 
+// Matrix classification tiers.
+const (
+	matrixTierStrict  = "matrix"
+	matrixTierPartial = "partial-matrix"
+	matrixTierNone    = "no-matrix"
+)
+
 var (
-	k8sVersionPattern = regexp.MustCompile(`(?i)(?:kubernetes|k8s)\s*(?:version)?\s*\d+\.\d+`)
-	matrixKeyword     = regexp.MustCompile(`(?i)(?:compatibility\s+matrix|supported\s+(?:kubernetes\s+)?versions?|version\s+support|k8s\s+compatibility)`)
+	// Strict patterns: "kubernetes/k8s" adjacent to a version number + formal matrix keyword.
+	k8sVersionStrict = regexp.MustCompile(`(?i)(?:kubernetes|k8s)\s*(?:version)?\s*v?\d+\.\d+`)
+	matrixKeyStrict  = regexp.MustCompile(`(?i)(?:compatibility\s+matrix|supported\s+(?:kubernetes\s+)?versions?|version\s+support|k8s\s+compatibility)`)
+
+	// Loose patterns: "kubernetes/k8s" within 200 chars of a version number + broader keywords.
+	k8sVersionLoose = regexp.MustCompile(`(?i)(?:kubernetes|k8s).{0,200}v?\d+\.\d+`)
+	matrixKeyLoose  = regexp.MustCompile(`(?i)(?:compatibility\s+matrix|supported\s+(?:kubernetes\s+)?versions?|version\s+support|k8s\s+compatibility|requirements?|prerequisites?|minimum\s+(?:kubernetes\s+)?version|tested\s+(?:on|with|against)|works\s+with|compatible\s+with|requires?\s+(?:kubernetes|k8s)|platform\s+(?:support|notes?|requirements?))`)
 )
 
 type consumer struct {
@@ -36,9 +48,9 @@ type urlTask struct {
 }
 
 type urlResult struct {
-	reachable    bool
-	reachError   string // "HTTP 404", "error: timeout", etc.
-	contentValid bool   // only meaningful if needsContent was true
+	reachable  bool
+	reachError string // "HTTP 404", "error: timeout", etc.
+	matrixTier string // matrixTierStrict, matrixTierPartial, or matrixTierNone; only meaningful if needsContent was true
 }
 
 // harvest extracts all URLs from addons and builds a map of unique URL tasks.
@@ -163,8 +175,8 @@ func executeTask(ctx context.Context, client *http.Client, task *urlTask) *urlRe
 			return &urlResult{reachable: false, reachError: fmt.Sprintf("error: %v", err)}
 		}
 		return &urlResult{
-			reachable:    true,
-			contentValid: hasK8sMatrix(content),
+			reachable:  true,
+			matrixTier: classifyK8sMatrix(content),
 		}
 	}
 
@@ -235,9 +247,20 @@ func doRequestWithRetry(ctx context.Context, client *http.Client, request *http.
 	return resilience.DoHTTPRequestWithRetry(ctx, client, request, policy)
 }
 
+// classifyK8sMatrix returns the tier of K8s compatibility data found in page content.
+func classifyK8sMatrix(pageText string) string {
+	if k8sVersionStrict.MatchString(pageText) && matrixKeyStrict.MatchString(pageText) {
+		return matrixTierStrict
+	}
+	if k8sVersionLoose.MatchString(pageText) && matrixKeyLoose.MatchString(pageText) {
+		return matrixTierPartial
+	}
+	return matrixTierNone
+}
+
 // hasK8sMatrix checks whether page content contains K8s version compatibility data.
 func hasK8sMatrix(pageText string) bool {
-	return k8sVersionPattern.MatchString(pageText) && matrixKeyword.MatchString(pageText)
+	return classifyK8sMatrix(pageText) != matrixTierNone
 }
 
 type brokenLink struct {
@@ -285,14 +308,14 @@ func report(tasks map[string]*urlTask, results map[string]*urlResult, linksOnly 
 			continue
 		}
 
-		// Reachable but content invalid: only report compatibility_matrix_url consumers
-		if t.needsContent && !r.contentValid {
+		// Reachable but no K8s matrix content: only report compatibility_matrix_url consumers
+		if t.needsContent && r.matrixTier == matrixTierNone {
 			for _, c := range t.consumers {
 				if c.field == "compatibility_matrix_url" {
 					matrixProblems = append(matrixProblems, matrixProblem{
 						addonName: c.addonName,
 						url:       t.url,
-						status:    "no-matrix",
+						status:    matrixTierNone,
 					})
 				}
 			}

@@ -195,6 +195,69 @@ func TestHasK8sMatrix_EmptyPage(t *testing.T) {
 	}
 }
 
+// --- classifyK8sMatrix tiered tests ---
+
+func TestClassifyK8sMatrix_Strict(t *testing.T) {
+	tests := []struct {
+		name string
+		page string
+	}{
+		{"full matrix", "Compatibility matrix: supported Kubernetes versions: Kubernetes 1.28, Kubernetes 1.29"},
+		{"version support", "Version support: Kubernetes 1.30 is supported"},
+		{"k8s compat", "k8s compatibility: k8s 1.28 and k8s 1.29"},
+		{"v-prefix strict", "Supported versions: Kubernetes v1.28, v1.29, v1.30"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := classifyK8sMatrix(tt.page); got != matrixTierStrict {
+				t.Errorf("classifyK8sMatrix() = %q, want %q", got, matrixTierStrict)
+			}
+		})
+	}
+}
+
+func TestClassifyK8sMatrix_Partial(t *testing.T) {
+	tests := []struct {
+		name string
+		page string
+	}{
+		{"requirements keyword", "Requirements: Kubernetes cluster running v1.25 or later"},
+		{"prerequisites keyword", "Prerequisites: a Kubernetes 1.26+ cluster is required"},
+		{"tested with", "Tested with Kubernetes clusters version 1.27 and 1.28"},
+		{"requires k8s", "Requires Kubernetes >= 1.22 with CSI support"},
+		{"platform requirements", "Platform requirements: Kubernetes v1.24 minimum"},
+		{"compatible with", "Compatible with Kubernetes versions from 1.25 to 1.30"},
+		{"loose distance", "This addon runs on Kubernetes. Check the requirements for version 1.28 or newer."},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := classifyK8sMatrix(tt.page); got != matrixTierPartial {
+				t.Errorf("classifyK8sMatrix() = %q, want %q", got, matrixTierPartial)
+			}
+		})
+	}
+}
+
+func TestClassifyK8sMatrix_None(t *testing.T) {
+	tests := []struct {
+		name string
+		page string
+	}{
+		{"no k8s mention", "Install using helm install my-chart"},
+		{"version but no keyword", "Install on Kubernetes 1.28 using helm install"},
+		{"keyword but no version", "See our compatibility matrix for details"},
+		{"empty page", ""},
+		{"generic overview", "This is a general product overview page"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := classifyK8sMatrix(tt.page); got != matrixTierNone {
+				t.Errorf("classifyK8sMatrix() = %q, want %q", got, matrixTierNone)
+			}
+		})
+	}
+}
+
 // --- New tests: aggregation and flag logic ---
 
 func TestAggregation_SharedURL(t *testing.T) {
@@ -263,8 +326,8 @@ func TestReporting_MixedConsumers(t *testing.T) {
 
 	results := map[string]*urlResult{
 		"https://example.com/page": {
-			reachable:    true,
-			contentValid: false, // regex fails
+			reachable:  true,
+			matrixTier: matrixTierNone,
 		},
 	}
 
