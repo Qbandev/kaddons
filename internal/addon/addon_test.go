@@ -1,6 +1,7 @@
 package addon
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -16,6 +17,12 @@ func TestLoadAddons(t *testing.T) {
 	first := addons[0]
 	if first.Name == "" {
 		t.Error("first addon has empty Name")
+	}
+}
+
+func TestEmbeddedDatabase_DoesNotContainUpgradePathType(t *testing.T) {
+	if strings.Contains(string(addonsJSON), "\"upgrade_path_type\"") {
+		t.Fatal("embedded addon database should not include upgrade_path_type")
 	}
 }
 
@@ -240,6 +247,36 @@ func TestLookupAddon_NoMatchUnknown(t *testing.T) {
 	matches := LookupAddon("totally-unknown-addon", addons)
 	if len(matches) != 0 {
 		t.Errorf("LookupAddon(totally-unknown-addon) returned %d matches, want 0", len(matches))
+	}
+}
+
+func TestMatcher_Match(t *testing.T) {
+	addons := []Addon{
+		{Name: "AWS EBS CSI Driver"},
+		{Name: "Prometheus Node Exporter"},
+		{Name: "NodeLocal DNSCache"},
+	}
+	matcher := NewMatcher(addons)
+
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{input: "ebs-csi-node", want: "AWS EBS CSI Driver"},
+		{input: "node-exporter", want: "Prometheus Node Exporter"},
+		{input: "node-local-dns", want: "NodeLocal DNSCache"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			matches := matcher.Match(tt.input)
+			if len(matches) != 1 {
+				t.Fatalf("Match(%q) returned %d matches, want 1", tt.input, len(matches))
+			}
+			if matches[0].Name != tt.want {
+				t.Fatalf("Match(%q) = %q, want %q", tt.input, matches[0].Name, tt.want)
+			}
+		})
 	}
 }
 

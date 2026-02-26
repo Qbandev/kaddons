@@ -84,7 +84,7 @@ See [addon-database.md](addon-database.md) for the full process.
 
 Short version:
 
-1. Add entry to `internal/addon/k8s_universal_addons.json` with all six fields
+1. Add entry to `internal/addon/k8s_universal_addons.json` with all five fields
 2. `go build ./...` — verify JSON parses
 3. `make validate` — verify URLs are reachable and compatibility pages have K8s data
 4. `go test -v ./...` — all tests pass
