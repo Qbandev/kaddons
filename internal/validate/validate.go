@@ -34,6 +34,9 @@ var (
 	// Loose patterns: "kubernetes/k8s" within 200 chars of a version number + broader keywords.
 	k8sVersionLoose = regexp.MustCompile(`(?i)(?:kubernetes|k8s).{0,200}v?\d+\.\d+`)
 	matrixKeyLoose  = regexp.MustCompile(`(?i)(?:compatibility\s+matrix|supported\s+(?:kubernetes\s+)?versions?|version\s+support|k8s\s+compatibility|requirements?|prerequisites?|minimum\s+(?:kubernetes\s+)?version|tested\s+(?:on|with|against)|works\s+with|compatible\s+with|requires?\s+(?:kubernetes|k8s)|platform\s+(?:support|notes?|requirements?))`)
+
+	// Validation pattern for K8s version strings (e.g. "1.28", "1.30").
+	k8sVersionFormat = regexp.MustCompile(`^\d+\.\d+$`)
 )
 
 type consumer struct {
@@ -111,6 +114,63 @@ func applyFlags(tasks map[string]*urlTask, linksOnly, matrixOnly bool) {
 	}
 }
 
+// storedDataProblem records a validation issue with stored compatibility data.
+type storedDataProblem struct {
+	addonName string
+	field     string
+	value     string
+	reason    string
+}
+
+// validateStoredData checks stored compatibility data for format correctness.
+func validateStoredData(addons []addon.Addon) []storedDataProblem {
+	var problems []storedDataProblem
+
+	for _, a := range addons {
+		if a.KubernetesMinVersion != "" && !k8sVersionFormat.MatchString(a.KubernetesMinVersion) {
+			problems = append(problems, storedDataProblem{
+				addonName: a.Name,
+				field:     "kubernetes_min_version",
+				value:     a.KubernetesMinVersion,
+				reason:    "must match format X.Y (e.g. 1.28)",
+			})
+		}
+
+		for key, versions := range a.KubernetesCompatibility {
+			if key == "" {
+				problems = append(problems, storedDataProblem{
+					addonName: a.Name,
+					field:     "kubernetes_compatibility",
+					value:     "(empty key)",
+					reason:    "addon version key must be non-empty",
+				})
+				continue
+			}
+			if len(versions) == 0 {
+				problems = append(problems, storedDataProblem{
+					addonName: a.Name,
+					field:     "kubernetes_compatibility",
+					value:     key,
+					reason:    "K8s version list must be non-empty",
+				})
+				continue
+			}
+			for _, v := range versions {
+				if !k8sVersionFormat.MatchString(v) {
+					problems = append(problems, storedDataProblem{
+						addonName: a.Name,
+						field:     "kubernetes_compatibility[" + key + "]",
+						value:     v,
+						reason:    "K8s version must match format X.Y (e.g. 1.28)",
+					})
+				}
+			}
+		}
+	}
+
+	return problems
+}
+
 // Run executes the validate command.
 func Run(linksOnly, matrixOnly bool) error {
 	addons, err := addon.LoadAddons()
@@ -118,10 +178,25 @@ func Run(linksOnly, matrixOnly bool) error {
 		return fmt.Errorf("failed to load addon database: %w", err)
 	}
 
+	// Validate stored compatibility data format
+	storedProblems := validateStoredData(addons)
+	if len(storedProblems) > 0 {
+		fmt.Printf("Found **%d** stored compatibility data problems.\n\n", len(storedProblems))
+		fmt.Println("| Addon Name | Field | Value | Reason |")
+		fmt.Println("|------------|-------|-------|--------|")
+		for _, p := range storedProblems {
+			fmt.Printf("| %s | `%s` | %s | %s |\n", p.addonName, p.field, p.value, p.reason)
+		}
+		fmt.Println()
+	}
+
 	tasks := harvest(addons)
 	applyFlags(tasks, linksOnly, matrixOnly)
 
 	if len(tasks) == 0 {
+		if len(storedProblems) > 0 {
+			return ErrValidationFailed
+		}
 		fmt.Println("No URLs to validate.")
 		return nil
 	}
@@ -164,7 +239,14 @@ func Run(linksOnly, matrixOnly bool) error {
 	}
 	wg.Wait()
 
-	return report(tasks, results, linksOnly)
+	urlErr := report(tasks, results, linksOnly)
+	if urlErr != nil {
+		return urlErr
+	}
+	if len(storedProblems) > 0 {
+		return ErrValidationFailed
+	}
+	return nil
 }
 
 // executeTask processes a single URL task.
@@ -176,7 +258,7 @@ func executeTask(ctx context.Context, client *http.Client, task *urlTask) *urlRe
 		}
 		return &urlResult{
 			reachable:  true,
-			matrixTier: classifyK8sMatrix(content),
+			matrixTier: ClassifyK8sMatrix(content),
 		}
 	}
 
@@ -247,8 +329,8 @@ func doRequestWithRetry(ctx context.Context, client *http.Client, request *http.
 	return resilience.DoHTTPRequestWithRetry(ctx, client, request, policy)
 }
 
-// classifyK8sMatrix returns the tier of K8s compatibility data found in page content.
-func classifyK8sMatrix(pageText string) string {
+// ClassifyK8sMatrix returns the tier of K8s compatibility data found in page content.
+func ClassifyK8sMatrix(pageText string) string {
 	if k8sVersionStrict.MatchString(pageText) && matrixKeyStrict.MatchString(pageText) {
 		return matrixTierStrict
 	}
@@ -260,7 +342,7 @@ func classifyK8sMatrix(pageText string) string {
 
 // hasK8sMatrix checks whether page content contains K8s version compatibility data.
 func hasK8sMatrix(pageText string) bool {
-	return classifyK8sMatrix(pageText) != matrixTierNone
+	return ClassifyK8sMatrix(pageText) != matrixTierNone
 }
 
 type brokenLink struct {

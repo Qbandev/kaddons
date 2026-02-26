@@ -1,9 +1,11 @@
-kaddons
-kaddons-validate
+/kaddons
+/kaddons-validate
+/kaddons-extract
 .env
 .claude/
 *.exe
 dist/
 .gocache/
 .gopath/
-kaddons-report.html
+.cache/
+/kaddons-report.html

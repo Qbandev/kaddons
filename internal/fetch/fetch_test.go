@@ -149,6 +149,38 @@ func TestNormalizeFetchedContent_PreservesTableLikeLines(t *testing.T) {
 	}
 }
 
+func TestNormalizeFetchedContent_PreservesTableRowStructure(t *testing.T) {
+	html := `<table><thead><tr><th>KUBERNETES</th><th>1.29</th><th>1.30</th><th>1.31</th></tr></thead>` +
+		`<tbody><tr><td>karpenter</td><td>&gt;= 0.34</td><td>&gt;= 0.37</td><td>&gt;= 1.0.5</td></tr></tbody></table>`
+
+	got := normalizeFetchedContent(html, false)
+
+	// Cells within a row must appear on the same line, joined by pipe delimiters.
+	for _, want := range []string{"KUBERNETES", "1.29", "1.30", "1.31"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("normalizeFetchedContent() missing %q in: %q", want, got)
+		}
+	}
+
+	lines := strings.Split(got, "\n")
+	foundHeaderRow := false
+	foundDataRow := false
+	for _, line := range lines {
+		if strings.Contains(line, "KUBERNETES") && strings.Contains(line, "1.29") && strings.Contains(line, "1.31") {
+			foundHeaderRow = true
+		}
+		if strings.Contains(line, "karpenter") && strings.Contains(line, "0.34") && strings.Contains(line, "1.0.5") {
+			foundDataRow = true
+		}
+	}
+	if !foundHeaderRow {
+		t.Errorf("expected header cells on the same line, got:\n%s", got)
+	}
+	if !foundDataRow {
+		t.Errorf("expected data cells on the same line, got:\n%s", got)
+	}
+}
+
 func TestNormalizeFetchedContent_UTF8SafeTruncation(t *testing.T) {
 	large := strings.Repeat("😀", 40000) // 160k bytes
 	got := normalizeFetchedContent(large, true)

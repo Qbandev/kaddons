@@ -316,6 +316,112 @@ func TestFormatOutput_HTMLWritesReportFile(t *testing.T) {
 	}
 }
 
+func TestAddonCompatibility_DataSourceRoundTrip(t *testing.T) {
+	original := []AddonCompatibility{
+		{
+			Name:             "test-stored",
+			Namespace:        "default",
+			InstalledVersion: "v1.2.3",
+			Compatible:       StatusTrue,
+			Note:             "From stored data",
+			DataSource:       DataSourceStored,
+		},
+		{
+			Name:             "test-runtime",
+			Namespace:        "kube-system",
+			InstalledVersion: "v0.5.0",
+			Compatible:       StatusUnknown,
+			Note:             "From runtime",
+			DataSource:       DataSourceRuntime,
+		},
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+
+	var decoded []AddonCompatibility
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+
+	if decoded[0].DataSource != DataSourceStored {
+		t.Errorf("addon[0].data_source = %q, want %q", decoded[0].DataSource, DataSourceStored)
+	}
+	if decoded[1].DataSource != DataSourceRuntime {
+		t.Errorf("addon[1].data_source = %q, want %q", decoded[1].DataSource, DataSourceRuntime)
+	}
+}
+
+func TestAddonCompatibility_DataSourceOmittedWhenEmpty(t *testing.T) {
+	addon := AddonCompatibility{
+		Name:             "test",
+		Namespace:        "ns",
+		InstalledVersion: "v1",
+		Compatible:       StatusTrue,
+	}
+	data, err := json.Marshal(addon)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+	if strings.Contains(string(data), "data_source") {
+		t.Error("JSON should omit empty data_source field")
+	}
+}
+
+func TestFormatOutput_HTMLContainsSourceColumn(t *testing.T) {
+	tempDir := t.TempDir()
+	reportPath := filepath.Join(tempDir, "source-report.html")
+	raw := `[{"name":"stored-addon","namespace":"default","installed_version":"v1.0.0","compatible":"true","data_source":"stored"},{"name":"runtime-addon","namespace":"default","installed_version":"v2.0.0","compatible":"unknown","data_source":"runtime"}]`
+
+	_, err := FormatOutput(raw, "1.31", "html", reportPath)
+	if err != nil {
+		t.Fatalf("FormatOutput(html) error = %v", err)
+	}
+
+	data, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("reading report: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "Source") {
+		t.Error("HTML report missing Source column header")
+	}
+	if !strings.Contains(content, "source-stored") {
+		t.Error("HTML report missing source-stored class")
+	}
+	if !strings.Contains(content, "source-runtime") {
+		t.Error("HTML report missing source-runtime class")
+	}
+}
+
+func TestFormatOutput_HTMLLinkifiesNotesURLsInNewWindow(t *testing.T) {
+	tempDir := t.TempDir()
+	reportPath := filepath.Join(tempDir, "notes-links-report.html")
+	raw := `[{"name":"argo-cd","namespace":"argocd","installed_version":"v3.0.8","compatible":"unknown","note":"See docs: https://argo-cd.readthedocs.io/en/stable/operator-manual/installation/#tested-versions","data_source":"runtime"}]`
+
+	_, err := FormatOutput(raw, "1.31", "html", reportPath)
+	if err != nil {
+		t.Fatalf("FormatOutput(html) error = %v", err)
+	}
+
+	data, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("reading report: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, `href="https://argo-cd.readthedocs.io/en/stable/operator-manual/installation/#tested-versions"`) {
+		t.Error("HTML report missing notes URL anchor href")
+	}
+	if !strings.Contains(content, `target="_blank"`) {
+		t.Error("HTML report notes link should open in new window/tab")
+	}
+	if !strings.Contains(content, `rel="noopener noreferrer"`) {
+		t.Error("HTML report notes link missing rel security attributes")
+	}
+}
+
 func TestFormatOutput_InvalidFormatReturnsError(t *testing.T) {
 	raw := `[{"name":"a","namespace":"ns","installed_version":"v1","compatible":"true","note":"ok"}]`
 	_, err := FormatOutput(raw, "1.30", "table", "")

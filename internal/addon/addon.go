@@ -13,16 +13,23 @@ var addonsJSON []byte
 
 // Addon represents a known Kubernetes addon in the embedded database.
 type Addon struct {
-	Name                   string `json:"name"`
-	ProjectURL             string `json:"project_url"`
-	Repository             string `json:"repository"`
-	CompatibilityMatrixURL string `json:"compatibility_matrix_url"`
-	ChangelogLocation      string `json:"changelog_location"`
+	Name                    string              `json:"name"`
+	ProjectURL              string              `json:"project_url"`
+	Repository              string              `json:"repository"`
+	CompatibilityMatrixURL  string              `json:"compatibility_matrix_url"`
+	ChangelogLocation       string              `json:"changelog_location"`
+	KubernetesCompatibility map[string][]string `json:"kubernetes_compatibility,omitempty"`
+	KubernetesMinVersion    string              `json:"kubernetes_min_version,omitempty"`
+}
+
+// HasStoredCompatibility returns true if the addon has pre-populated
+// Kubernetes compatibility data (either a full matrix or a minimum version).
+func (a *Addon) HasStoredCompatibility() bool {
+	return len(a.KubernetesCompatibility) > 0 || a.KubernetesMinVersion != ""
 }
 
 type addonsFile struct {
-	Addons   []Addon                `json:"addons"`
-	Metadata map[string]interface{} `json:"metadata"`
+	Addons []Addon `json:"addons"`
 }
 
 // EOLCycle represents a release cycle from the endoflife.date API.

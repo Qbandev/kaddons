@@ -6,8 +6,11 @@ import (
 	"html/template"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
+
+var reportURLPattern = regexp.MustCompile(`https?://[^\s<]+`)
 
 // Status represents a tri-state value: "true", "false", or "unknown".
 // It serializes as a JSON string and deserializes from booleans, strings, or null.
@@ -33,6 +36,12 @@ func (s *Status) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// Data source constants for provenance tracking.
+const (
+	DataSourceStored  = "stored"
+	DataSourceRuntime = "runtime"
+)
+
 // AddonCompatibility represents the compatibility verdict for a single addon.
 type AddonCompatibility struct {
 	Name                    string `json:"name"`
@@ -41,6 +50,7 @@ type AddonCompatibility struct {
 	Compatible              Status `json:"compatible"`
 	LatestCompatibleVersion string `json:"latest_compatible_version,omitempty"`
 	Note                    string `json:"note,omitempty"`
+	DataSource              string `json:"data_source,omitempty"`
 }
 
 // CompatibilityReport is the top-level output structure.
@@ -90,7 +100,9 @@ type htmlReportRow struct {
 	CompatibleClass         string
 	CompatibleLabel         string
 	LatestCompatibleVersion string
-	Note                    string
+	Note                    template.HTML
+	DataSourceClass         string
+	DataSourceLabel         string
 }
 
 type htmlReportData struct {
@@ -110,7 +122,7 @@ func writeHTMLReport(addons []AddonCompatibility, k8sVersion string, outputPath 
 			Namespace:               addon.Namespace,
 			InstalledVersion:        addon.InstalledVersion,
 			LatestCompatibleVersion: addon.LatestCompatibleVersion,
-			Note:                    addon.Note,
+			Note:                    linkifyReportNote(addon.Note),
 		}
 		switch addon.Compatible {
 		case StatusTrue:
@@ -125,6 +137,14 @@ func writeHTMLReport(addons []AddonCompatibility, k8sVersion string, outputPath 
 			row.CompatibleClass = "status-unknown"
 			row.CompatibleLabel = "unknown"
 			data.Unknown++
+		}
+		switch addon.DataSource {
+		case DataSourceStored:
+			row.DataSourceClass = "source-stored"
+			row.DataSourceLabel = "stored"
+		default:
+			row.DataSourceClass = "source-runtime"
+			row.DataSourceLabel = "runtime"
 		}
 		rows = append(rows, row)
 	}
@@ -168,6 +188,14 @@ func writeHTMLReport(addons []AddonCompatibility, k8sVersion string, outputPath 
 	return nil
 }
 
+func linkifyReportNote(note string) template.HTML {
+	escapedNote := template.HTMLEscapeString(note)
+	withLinks := reportURLPattern.ReplaceAllStringFunc(escapedNote, func(url string) string {
+		return fmt.Sprintf(`<a href="%s" target="_blank" rel="noopener noreferrer">%s</a>`, url, url)
+	})
+	return template.HTML(withLinks)
+}
+
 const htmlTemplate = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -191,6 +219,8 @@ const htmlTemplate = `<!DOCTYPE html>
     .status-true { color:#7ee787; border-color:#2b6a3f; background:#112b1a; }
     .status-false { color:#ff7b72; border-color:#8b2c35; background:#2d1419; }
     .status-unknown { color:#d29922; border-color:#6f5a1a; background:#252218; }
+    .source-stored { color:#a5d6ff; border-color:#1f4a7a; background:#0d2240; }
+    .source-runtime { color:#9fb0c3; border-color:#2b3541; background:#161b22; }
     .muted { color:#9fb0c3; }
   </style>
 </head>
@@ -210,6 +240,7 @@ const htmlTemplate = `<!DOCTYPE html>
         <th>Installed</th>
         <th>K8s</th>
         <th>Compatibility</th>
+        <th>Source</th>
         <th>Latest Compatible</th>
         <th>Notes</th>
       </tr>
@@ -222,6 +253,7 @@ const htmlTemplate = `<!DOCTYPE html>
         <td>{{ .InstalledVersion }}</td>
         <td>{{ $.K8sVersion }}</td>
         <td><span class="status-chip {{ .CompatibleClass }}">{{ .CompatibleLabel }}</span></td>
+        <td><span class="status-chip {{ .DataSourceClass }}">{{ .DataSourceLabel }}</span></td>
         <td>{{ if .LatestCompatibleVersion }}{{ .LatestCompatibleVersion }}{{ else }}<span class="muted">N/A</span>{{ end }}</td>
         <td>{{ if .Note }}{{ .Note }}{{ else }}<span class="muted">No details</span>{{ end }}</td>
       </tr>

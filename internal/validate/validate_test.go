@@ -195,7 +195,7 @@ func TestHasK8sMatrix_EmptyPage(t *testing.T) {
 	}
 }
 
-// --- classifyK8sMatrix tiered tests ---
+// --- ClassifyK8sMatrix tiered tests ---
 
 func TestClassifyK8sMatrix_Strict(t *testing.T) {
 	tests := []struct {
@@ -209,8 +209,8 @@ func TestClassifyK8sMatrix_Strict(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := classifyK8sMatrix(tt.page); got != matrixTierStrict {
-				t.Errorf("classifyK8sMatrix() = %q, want %q", got, matrixTierStrict)
+			if got := ClassifyK8sMatrix(tt.page); got != matrixTierStrict {
+				t.Errorf("ClassifyK8sMatrix() = %q, want %q", got, matrixTierStrict)
 			}
 		})
 	}
@@ -231,8 +231,8 @@ func TestClassifyK8sMatrix_Partial(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := classifyK8sMatrix(tt.page); got != matrixTierPartial {
-				t.Errorf("classifyK8sMatrix() = %q, want %q", got, matrixTierPartial)
+			if got := ClassifyK8sMatrix(tt.page); got != matrixTierPartial {
+				t.Errorf("ClassifyK8sMatrix() = %q, want %q", got, matrixTierPartial)
 			}
 		})
 	}
@@ -251,8 +251,8 @@ func TestClassifyK8sMatrix_None(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := classifyK8sMatrix(tt.page); got != matrixTierNone {
-				t.Errorf("classifyK8sMatrix() = %q, want %q", got, matrixTierNone)
+			if got := ClassifyK8sMatrix(tt.page); got != matrixTierNone {
+				t.Errorf("ClassifyK8sMatrix() = %q, want %q", got, matrixTierNone)
 			}
 		})
 	}
@@ -395,6 +395,113 @@ func TestLinksOnlyFlag(t *testing.T) {
 
 	if len(tasks) != 2 {
 		t.Errorf("expected 2 tasks (--links keeps all URLs), got %d", len(tasks))
+	}
+}
+
+// --- validateStoredData tests ---
+
+func TestValidateStoredData_ValidFullMatrix(t *testing.T) {
+	addons := []addon.Addon{
+		{
+			Name: "cert-manager",
+			KubernetesCompatibility: map[string][]string{
+				"1.15": {"1.28", "1.29", "1.30"},
+			},
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 0 {
+		t.Fatalf("expected 0 problems, got %d: %+v", len(problems), problems)
+	}
+}
+
+func TestValidateStoredData_ValidMinVersion(t *testing.T) {
+	addons := []addon.Addon{
+		{
+			Name:                 "karpenter",
+			KubernetesMinVersion: "1.23",
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 0 {
+		t.Fatalf("expected 0 problems, got %d: %+v", len(problems), problems)
+	}
+}
+
+func TestValidateStoredData_InvalidMinVersion(t *testing.T) {
+	addons := []addon.Addon{
+		{
+			Name:                 "bad-addon",
+			KubernetesMinVersion: "v1.23",
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 1 {
+		t.Fatalf("expected 1 problem, got %d: %+v", len(problems), problems)
+	}
+	if problems[0].field != "kubernetes_min_version" {
+		t.Errorf("expected field kubernetes_min_version, got %q", problems[0].field)
+	}
+}
+
+func TestValidateStoredData_InvalidK8sVersionInMatrix(t *testing.T) {
+	addons := []addon.Addon{
+		{
+			Name: "bad-matrix",
+			KubernetesCompatibility: map[string][]string{
+				"1.5": {"1.28", "v1.29", "latest"},
+			},
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 2 {
+		t.Fatalf("expected 2 problems, got %d: %+v", len(problems), problems)
+	}
+}
+
+func TestValidateStoredData_EmptyKey(t *testing.T) {
+	addons := []addon.Addon{
+		{
+			Name: "empty-key",
+			KubernetesCompatibility: map[string][]string{
+				"": {"1.28"},
+			},
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 1 {
+		t.Fatalf("expected 1 problem, got %d: %+v", len(problems), problems)
+	}
+	if problems[0].reason != "addon version key must be non-empty" {
+		t.Errorf("unexpected reason: %q", problems[0].reason)
+	}
+}
+
+func TestValidateStoredData_EmptyVersionList(t *testing.T) {
+	addons := []addon.Addon{
+		{
+			Name: "empty-versions",
+			KubernetesCompatibility: map[string][]string{
+				"1.5": {},
+			},
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 1 {
+		t.Fatalf("expected 1 problem, got %d: %+v", len(problems), problems)
+	}
+	if problems[0].reason != "K8s version list must be non-empty" {
+		t.Errorf("unexpected reason: %q", problems[0].reason)
+	}
+}
+
+func TestValidateStoredData_NoStoredData(t *testing.T) {
+	addons := []addon.Addon{
+		{Name: "no-data"},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 0 {
+		t.Fatalf("expected 0 problems, got %d: %+v", len(problems), problems)
 	}
 }
 
