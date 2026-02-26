@@ -15,7 +15,7 @@ Runs on every push to `main` and every pull request targeting `main`.
 | Vet | `go vet ./...` | Static analysis for common mistakes |
 | Lint | `golangci-lint` (latest) | Code style and quality enforcement |
 | Test | `go test ./... -race -v` | Unit tests with race detector |
-| Tidy check | `go mod tidy` + diff | Ensures module files are committed clean |
+| Tidy check (advisory) | `go mod tidy` + diff | Reports module tidy differences observed in CI environment |
 
 **Addon DB validation job:**
 
