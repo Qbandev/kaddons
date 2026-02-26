@@ -35,8 +35,9 @@ jobs:
       - name: Ensure module tidy
         run: |
           go mod tidy
-          if [ -n "$(git status --porcelain)" ]; then
+          if ! git diff --quiet -- go.mod go.sum; then
             echo "::error::go.mod/go.sum are not tidy. Run 'go mod tidy' and commit."
+            git diff -- go.mod go.sum
             exit 1
           fi
 
