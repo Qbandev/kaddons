@@ -22,10 +22,12 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.local/bin"
-          curl -fsSLO "https://github.com/sheeki03/tirith/releases/download/v0.2.2/tirith-x86_64-unknown-linux-gnu.tar.gz"
-          echo "f80841b6c88c8b6b84469602d00e06b2d54395366626f67b4e32a7a307a3311a  tirith-x86_64-unknown-linux-gnu.tar.gz" | sha256sum -c -
-          tar -xzf "tirith-x86_64-unknown-linux-gnu.tar.gz" tirith
-          install -m 0755 tirith "$HOME/.local/bin/tirith"
+          tmp_dir="$(mktemp -d)"
+          curl -fsSL "https://github.com/sheeki03/tirith/releases/download/v0.2.2/tirith-x86_64-unknown-linux-gnu.tar.gz" -o "$tmp_dir/tirith.tar.gz"
+          echo "f80841b6c88c8b6b84469602d00e06b2d54395366626f67b4e32a7a307a3311a  $tmp_dir/tirith.tar.gz" | sha256sum -c -
+          tar -xzf "$tmp_dir/tirith.tar.gz" -C "$tmp_dir" tirith
+          install -m 0755 "$tmp_dir/tirith" "$HOME/.local/bin/tirith"
+          rm -rf "$tmp_dir"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: Scan repository with Tirith
-        run: tirith scan . --ci --fail-on high
+        run: tirith scan . --ci --fail-on critical

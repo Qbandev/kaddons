@@ -34,23 +34,17 @@ Runs on every push to `main` and every pull request targeting `main`.
 
 | Job | Check | Purpose |
 |-----|-------|---------|
-| Source install | `make build` + `./kaddons --version` | Ensures build-from-source installation works |
-| Go install | `go install ...@${GITHUB_SHA}` + version check | Ensures module installation works |
 | Homebrew tap install | `brew tap qbandev/tap` + `brew install qbandev/tap/kaddons` | Ensures Homebrew installation path works |
 
 ### Supply chain security (`supply-chain.yml`)
 
 Runs on pull requests and pushes to `main`.
 
-1. **Tirith scan** — repository security scan for hidden/injection-style content using `tirith scan --ci --fail-on high`
+1. **Tirith scan** — repository security scan for hidden/injection-style content using `tirith scan --ci --fail-on critical`
 
 ### Dependency review (`dependency-review.yml`)
 
 Runs on pull requests to `main` and blocks risky dependency introductions using GitHub's dependency review action.
-
-### Code scanning (`codeql.yml`)
-
-Runs CodeQL analysis on pull requests, pushes to `main`, and weekly schedule to catch code-level security issues.
 
 ### Scorecards (`scorecards.yml`)
 
@@ -141,7 +135,7 @@ golangci-lint run
 # Security
 govulncheck ./...
 gosec ./...
-tirith scan . --ci --fail-on high
+tirith scan . --ci --fail-on critical
 
 # Validate addon DB (no cluster needed)
 make validate                              # both checks

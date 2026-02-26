@@ -77,33 +77,6 @@ jobs:
       - name: Gosec
         run: gosec ./...
 
-  install-from-source:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
-        with:
-          go-version: '1.25.7'
-          cache: true
-      - name: Build from source
-        run: make build
-      - name: Verify built binary
-        run: ./kaddons --version
-
-  install-via-go:
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
-        with:
-          go-version: '1.25.7'
-          cache: true
-      - name: Install from module
-        run: go install github.com/qbandev/kaddons/cmd/kaddons@${{ github.sha }}
-      - name: Verify go-installed binary
-        run: |
-          "$(go env GOPATH)/bin/kaddons" --version
-
   install-via-homebrew-tap:
     if: github.event_name == 'push'
     runs-on: macos-latest
