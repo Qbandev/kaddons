@@ -26,6 +26,10 @@ checksum:
   name_template: 'checksums.txt'
   algorithm: sha256
 
+release:
+  mode: keep-existing
+  replace_existing_artifacts: true
+
 changelog:
   sort: asc
   filters:

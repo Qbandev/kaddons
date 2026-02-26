@@ -44,6 +44,12 @@ make build
 # Binary: ./kaddons
 ```
 
+All three installation methods above are validated in CI, including a live Homebrew tap install smoke test.
+
+## Releases
+
+Releases are automated from merges to `main` using release-please. When releasable changes are detected, release-please opens or updates a release PR; once that release PR is merged, a new version tag is created and the publish workflow builds artifacts and updates the Homebrew tap.
+
 ## Quick start
 
 ```bash
@@ -160,3 +166,7 @@ The LLM reads each addon's official compatibility page and extracts version supp
 ```bash
 go test -v -race ./...
 ```
+
+## License
+
+MIT. See `LICENSE`.
