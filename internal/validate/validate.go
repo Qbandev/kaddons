@@ -171,16 +171,36 @@ func validateStoredData(addons []addon.Addon) []storedDataProblem {
 	return problems
 }
 
+func validateStoredDataOnly(addons []addon.Addon) error {
+	storedProblems := validateStoredData(addons)
+	if len(storedProblems) > 0 {
+		fmt.Printf("Found **%d** stored compatibility data problems.\n\n", len(storedProblems))
+		fmt.Println("| Addon Name | Field | Value | Reason |")
+		fmt.Println("|------------|-------|-------|--------|")
+		for _, p := range storedProblems {
+			fmt.Printf("| %s | `%s` | %s | %s |\n", p.addonName, p.field, p.value, p.reason)
+		}
+		fmt.Println()
+		return ErrValidationFailed
+	}
+	fmt.Println("Stored compatibility data validation passed.")
+	return nil
+}
+
 // Run executes the validate command.
-func Run(linksOnly, matrixOnly bool) error {
+func Run(linksOnly, matrixOnly, storedOnly bool) error {
 	addons, err := addon.LoadAddons()
 	if err != nil {
 		return fmt.Errorf("failed to load addon database: %w", err)
 	}
 
-	// Validate stored compatibility data format
+	if storedOnly {
+		return validateStoredDataOnly(addons)
+	}
+	// Validate stored compatibility data format alongside URL checks.
 	storedProblems := validateStoredData(addons)
-	if len(storedProblems) > 0 {
+	hasStoredProblems := len(storedProblems) > 0
+	if hasStoredProblems {
 		fmt.Printf("Found **%d** stored compatibility data problems.\n\n", len(storedProblems))
 		fmt.Println("| Addon Name | Field | Value | Reason |")
 		fmt.Println("|------------|-------|-------|--------|")
@@ -194,7 +214,7 @@ func Run(linksOnly, matrixOnly bool) error {
 	applyFlags(tasks, linksOnly, matrixOnly)
 
 	if len(tasks) == 0 {
-		if len(storedProblems) > 0 {
+		if hasStoredProblems {
 			return ErrValidationFailed
 		}
 		fmt.Println("No URLs to validate.")
@@ -243,7 +263,7 @@ func Run(linksOnly, matrixOnly bool) error {
 	if urlErr != nil {
 		return urlErr
 	}
-	if len(storedProblems) > 0 {
+	if hasStoredProblems {
 		return ErrValidationFailed
 	}
 	return nil
