@@ -4,14 +4,14 @@
       "name": "Spark Operator",
       "project_url": "https://github.com/kubeflow/spark-operator",
       "repository": "https://github.com/kubeflow/spark-operator",
-      "compatibility_matrix_url": "https://github.com/kubeflow/spark-operator#readme",
+      "compatibility_matrix_url": "https://github.com/kubeflow/spark-operator#version-matrix",
       "changelog_location": "https://github.com/kubeflow/spark-operator/releases"
     },
     {
       "name": "KubeRay",
       "project_url": "https://ray-project.github.io/kuberay/",
       "repository": "https://github.com/ray-project/kuberay",
-      "compatibility_matrix_url": "https://ray-project.github.io/kuberay/deploy/installation/",
+      "compatibility_matrix_url": "https://docs.ray.io/en/latest/cluster/kubernetes/user-guides/upgrade-guide.html",
       "changelog_location": "https://github.com/ray-project/kuberay/releases"
     },
     {
@@ -221,7 +221,7 @@
       "name": "Flux Notification Controller",
       "project_url": "https://fluxcd.io/flux/components/notification/",
       "repository": "https://github.com/fluxcd/notification-controller",
-      "compatibility_matrix_url": "https://fluxcd.io/flux/installation/",
+      "compatibility_matrix_url": "https://fluxcd.io/flux/releases/",
       "changelog_location": "https://github.com/fluxcd/notification-controller/releases"
     },
     {
@@ -242,14 +242,14 @@
       "name": "Flux Image Automation",
       "project_url": "https://fluxcd.io/flux/components/image/",
       "repository": "https://github.com/fluxcd/image-reflector-controller",
-      "compatibility_matrix_url": "https://fluxcd.io/flux/installation/",
+      "compatibility_matrix_url": "https://fluxcd.io/flux/releases/",
       "changelog_location": "https://github.com/fluxcd/image-reflector-controller/releases"
     },
     {
       "name": "Tekton Pipelines",
       "project_url": "https://tekton.dev/",
       "repository": "https://github.com/tektoncd/pipeline",
-      "compatibility_matrix_url": "https://github.com/tektoncd/pipeline#want-to-start-using-pipelines",
+      "compatibility_matrix_url": "https://github.com/tektoncd/pipeline#required-kubernetes-version",
       "changelog_location": "https://github.com/tektoncd/pipeline/releases"
     },
     {
@@ -1047,7 +1047,7 @@
       "name": "Prometheus Operator / kube-prometheus-stack",
       "project_url": "https://prometheus-operator.dev/",
       "repository": "https://github.com/prometheus-operator/prometheus-operator",
-      "compatibility_matrix_url": "https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack",
+      "compatibility_matrix_url": "https://github.com/prometheus-operator/kube-prometheus#compatibility",
       "changelog_location": "https://github.com/prometheus-operator/prometheus-operator/releases"
     },
     {
@@ -1411,7 +1411,7 @@
       "name": "Harbor",
       "project_url": "https://goharbor.io/",
       "repository": "https://github.com/goharbor/harbor",
-      "compatibility_matrix_url": "https://github.com/goharbor/harbor-helm",
+      "compatibility_matrix_url": "https://github.com/goharbor/harbor-helm#harbor-kubernetes-version-compatibility-matrix",
       "changelog_location": "https://github.com/goharbor/harbor/releases"
     },
     {
@@ -2923,7 +2923,7 @@
       "name": "Knative",
       "project_url": "https://knative.dev",
       "repository": "https://github.com/knative/serving",
-      "compatibility_matrix_url": "https://knative.dev/docs/install/yaml-install/serving/install-serving-with-yaml/#prerequisites",
+      "compatibility_matrix_url": "https://github.com/knative/community/blob/main/mechanics/RELEASE-SCHEDULE.md",
       "changelog_location": "https://github.com/knative/serving/releases"
     },
     {
@@ -4330,7 +4330,7 @@
       "name": "Velero",
       "project_url": "https://velero.io",
       "repository": "https://github.com/vmware-tanzu/velero",
-      "compatibility_matrix_url": "https://velero.io/docs/main/basic-install/#prerequisites",
+      "compatibility_matrix_url": "https://github.com/vmware-tanzu/velero#velero-compatibility-matrix",
       "changelog_location": "https://github.com/vmware-tanzu/velero/releases"
     },
     {
@@ -4379,7 +4379,7 @@
       "name": "cert-manager approver-policy",
       "project_url": "https://cert-manager.io/docs/policy/approval/approver-policy/",
       "repository": "https://github.com/cert-manager/approver-policy",
-      "compatibility_matrix_url": "https://cert-manager.io/docs/policy/approval/approver-policy/#installation",
+      "compatibility_matrix_url": "https://cert-manager.io/docs/releases/",
       "changelog_location": "https://github.com/cert-manager/approver-policy/releases"
     },
     {
