@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/qbandev/kaddons/internal/addon"
@@ -71,6 +72,13 @@ func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addo
 		}
 		detected = filtered
 	}
+	sort.SliceStable(detected, func(leftIndex int, rightIndex int) bool {
+		left := detected[leftIndex]
+		right := detected[rightIndex]
+		leftKey := strings.ToLower(left.Name) + "|" + strings.ToLower(left.Namespace) + "|" + strings.ToLower(left.Version)
+		rightKey := strings.ToLower(right.Name) + "|" + strings.ToLower(right.Namespace) + "|" + strings.ToLower(right.Version)
+		return leftKey < rightKey
+	})
 	fmt.Fprintf(os.Stderr, "Discovered %d workloads\n", len(detected))
 
 	// Phase 2: Match addons against DB, deduplicate by addon name (prefer entry with version)
@@ -113,7 +121,13 @@ func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addo
 	}
 	enriched := make([]addonWithInfo, 0, len(bestByName))
 	fetchedURLs := make(map[string]string) // cache: URL -> content
-	for _, entry := range bestByName {
+	orderedAddonNames := make([]string, 0, len(bestByName))
+	for addonName := range bestByName {
+		orderedAddonNames = append(orderedAddonNames, addonName)
+	}
+	sort.Strings(orderedAddonNames)
+	for _, addonName := range orderedAddonNames {
+		entry := bestByName[addonName]
 		info := entry.info
 		if info.DBMatch.CompatibilityMatrixURL != "" {
 			info.CompatibilityURL = info.DBMatch.CompatibilityMatrixURL
@@ -195,8 +209,18 @@ func analyzeCompatibility(ctx context.Context, client *genai.Client, model strin
 		return fmt.Errorf("marshaling addon data: %w", err)
 	}
 
+	deterministicTemperature := float32(0)
+	deterministicTopP := float32(1)
+	deterministicTopK := float32(1)
+	deterministicSeed := int32(42)
 	config := &genai.GenerateContentConfig{
 		SystemInstruction: genai.NewContentFromText(analysisSystemPrompt, genai.RoleUser),
+		Temperature:       &deterministicTemperature,
+		TopP:              &deterministicTopP,
+		TopK:              &deterministicTopK,
+		Seed:              &deterministicSeed,
+		CandidateCount:    1,
+		ResponseMIMEType:  "application/json",
 	}
 
 	resp, err := client.Models.GenerateContent(ctx, model, []*genai.Content{
