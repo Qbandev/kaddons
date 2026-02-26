@@ -3,10 +3,13 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/qbandev/kaddons/internal/addon"
 	"github.com/qbandev/kaddons/internal/cluster"
@@ -223,7 +226,7 @@ func analyzeCompatibility(ctx context.Context, client *genai.Client, model strin
 		ResponseMIMEType:  "application/json",
 	}
 
-	resp, err := client.Models.GenerateContent(ctx, model, []*genai.Content{
+	resp, err := generateContentWithRetry(ctx, client, model, []*genai.Content{
 		genai.NewContentFromText(
 			fmt.Sprintf("Analyze compatibility for these addons:\n\n%s", string(dataJSON)),
 			genai.RoleUser,
@@ -273,4 +276,51 @@ func collectTextResponse(resp *genai.GenerateContentResponse) string {
 		}
 	}
 	return sb.String()
+}
+
+func generateContentWithRetry(
+	ctx context.Context,
+	client *genai.Client,
+	model string,
+	contents []*genai.Content,
+	config *genai.GenerateContentConfig,
+) (*genai.GenerateContentResponse, error) {
+	const maxAttempts = 3
+	backoff := []time.Duration{0, time.Second, 2 * time.Second}
+	var lastErr error
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		if backoff[attempt-1] > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(backoff[attempt-1]):
+			}
+		}
+
+		resp, err := client.Models.GenerateContent(ctx, model, contents, config)
+		if err == nil {
+			return resp, nil
+		}
+		lastErr = err
+		if !isTransientLLMError(err) {
+			return nil, err
+		}
+	}
+
+	return nil, lastErr
+}
+
+func isTransientLLMError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, io.EOF) {
+		return true
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "unexpected eof") ||
+		strings.Contains(message, "timeout") ||
+		strings.Contains(message, "temporary") ||
+		strings.Contains(message, "connection reset by peer")
 }
