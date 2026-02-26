@@ -34,13 +34,7 @@ Runs on every push to `main` and every pull request targeting `main`.
 
 | Job | Check | Purpose |
 |-----|-------|---------|
-| Homebrew tap install | `brew tap qbandev/tap` + `brew install qbandev/tap/kaddons` | Ensures Homebrew installation path works |
-
-### Supply chain security (`supply-chain.yml`)
-
-Runs on pull requests and pushes to `main`.
-
-1. **Tirith scan** — repository security scan for hidden/injection-style content using `tirith scan --ci --fail-on critical`
+| Homebrew tap install | `brew tap qbandev/tap` + `brew install qbandev/tap/kaddons` | Ensures Homebrew installation path works (runs on push only) |
 
 ### Dependency review (`dependency-review.yml`)
 
@@ -135,7 +129,6 @@ golangci-lint run
 # Security
 govulncheck ./...
 gosec ./...
-tirith scan . --ci --fail-on critical
 
 # Validate addon DB (no cluster needed)
 make validate                              # both checks
