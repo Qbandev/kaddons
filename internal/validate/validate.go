@@ -8,11 +8,13 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/qbandev/kaddons/internal/addon"
 	"github.com/qbandev/kaddons/internal/fetch"
+	"github.com/qbandev/kaddons/internal/resilience"
 )
 
 // ErrValidationFailed is returned when one or more validation checks fail.
@@ -186,7 +188,7 @@ func checkURL(ctx context.Context, client *http.Client, rawURL string) string {
 	}
 	req.Header.Set("User-Agent", "kaddons-validate/1.0")
 
-	resp, err := client.Do(req) // #nosec G704 -- rawURL is pre-validated by ValidatePublicHTTPSURL
+	resp, err := doRequestWithRetry(ctx, client, req)
 	if err != nil {
 		return fmt.Sprintf("error: %v", err)
 	}
@@ -201,7 +203,7 @@ func checkURL(ctx context.Context, client *http.Client, rawURL string) string {
 		}
 		getReq.Header.Set("User-Agent", "kaddons-validate/1.0")
 
-		resp2, err := client.Do(getReq) // #nosec G704 -- rawURL is pre-validated by ValidatePublicHTTPSURL
+		resp2, err := doRequestWithRetry(ctx, client, getReq)
 		if err != nil {
 			return fmt.Sprintf("error: %v", err)
 		}
@@ -222,6 +224,40 @@ func checkURL(ctx context.Context, client *http.Client, rawURL string) string {
 		return fmt.Sprintf("HTTP %d", resp.StatusCode)
 	}
 	return "ok"
+}
+
+func doRequestWithRetry(ctx context.Context, client *http.Client, request *http.Request) (*http.Response, error) {
+	policy := resilience.RetryPolicy{
+		Attempts:     3,
+		InitialDelay: 500 * time.Millisecond,
+		MaxDelay:     time.Second,
+		Multiplier:   2,
+	}
+	attemptCounter := 0
+	return resilience.RetryWithResult(ctx, policy, isRetryableRequestError, func(callCtx context.Context) (*http.Response, error) {
+		attemptCounter++
+		reqForAttempt := request.Clone(callCtx)
+		response, err := client.Do(reqForAttempt) // #nosec G704 -- rawURL is pre-validated by ValidatePublicHTTPSURL
+		if err != nil {
+			return nil, err
+		}
+		if isRetryableStatusCode(response.StatusCode) {
+			if attemptCounter >= policy.Attempts {
+				return response, nil
+			}
+			_ = response.Body.Close()
+			return nil, fmt.Errorf("retryable HTTP status %d", response.StatusCode)
+		}
+		return response, nil
+	})
+}
+
+func isRetryableStatusCode(statusCode int) bool {
+	return resilience.IsRetryableHTTPStatus(statusCode)
+}
+
+func isRetryableRequestError(err error) bool {
+	return resilience.IsRetryableNetworkError(err) || strings.Contains(strings.ToLower(err.Error()), "retryable http status")
 }
 
 // hasK8sMatrix checks whether page content contains K8s version compatibility data.

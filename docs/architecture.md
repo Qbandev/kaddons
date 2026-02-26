@@ -10,7 +10,7 @@ kaddons uses a **Plan-and-Execute** architecture that separates deterministic da
 ├──────────────────┬──────────────────────────────────────────────────┤
 │ Phase 1          │ Discovery (deterministic)                        │
 │ Phase 2          │ Enrichment (deterministic)                       │
-│ Phase 3          │ Analysis (single LLM call)                       │
+│ Phase 3          │ Analysis (linear one-addon-at-a-time LLM calls)   │
 └──────────────────┴──────────────────────────────────────────────────┘
 ```
 
@@ -106,39 +106,29 @@ This provides EOL dates, latest versions, and support status per release cycle.
 
 ## Phase 3: Analysis
 
-A single Gemini API call receives all pre-collected data as JSON:
+Gemini is called in a deterministic linear loop: one addon per request, in sorted order.
 
-```json
-{
-  "k8s_version": "1.30",
-  "addons": [
-    {
-      "name": "cert-manager",
-      "namespace": "cert-manager",
-      "version": "v1.14.2",
-      "source": "deployment",
-      "db_match": { "name": "cert-manager", "compatibility_matrix_url": "..." },
-      "compatibility_content": "... (fetched page content) ...",
-      "compatibility_url": "https://cert-manager.io/docs/releases/",
-      "eol_data": [{ "cycle": "1.14", "eol": "2025-09-10", "latest": "1.14.7" }]
-    }
-  ]
-}
-```
+For each addon, the agent builds a bounded structured payload:
+- addon identity fields (`name`, `namespace`, `installed_version`)
+- source fields (`compatibility_url`, `fetch_error`)
+- deterministic compatibility evidence excerpt (keyword-based pruning with fixed line/byte caps)
+- bounded EOL summary rows
 
-The system prompt instructs the LLM to:
-- Return a JSON array with `compatible` as `"true"`, `"false"`, or `"unknown"` (strings, not booleans)
-- Cite the source URL in every `note` field
-- Include supported-until dates from EOL data when available
-- Return `"unknown"` rather than guessing when data is unclear
-- Include every addon from the input (no filtering)
+The system prompt enforces a strict single-object response:
+- `compatible` must be `"true"`, `"false"`, or `"unknown"` (string)
+- `note` is mandatory and source-cited when URLs are available
+- unknown is used when evidence is insufficient
+- extra keys are rejected by schema settings
+
+If per-addon analysis fails after bounded retries/timeouts, that addon is emitted as `compatible="unknown"` with an explanatory note so the run always completes without hanging.
 
 ### Response processing
 
-1. Text is extracted from the Gemini response
+1. Text is extracted from each Gemini response
 2. Markdown code fences are stripped (`extractJSON`)
-3. JSON is deserialized into `[]AddonCompatibility`
+3. JSON is deserialized into `AddonCompatibility` and aggregated in deterministic order
 4. Custom `Status.UnmarshalJSON` handles LLM non-compliance: boolean `true` → `"true"`, `null` → `"unknown"`, garbage → `"unknown"`
+5. Final JSON/HTML output is rendered once, then summary is printed to stderr
 
 ## Database validation tool
 
@@ -190,13 +180,16 @@ internal/
     addon_test.go                     Matching, normalization, EOL tests
     k8s_universal_addons.json         668-addon database (embedded via go:embed)
   agent/
-    agent.go                          Plan-and-Execute pipeline: discovery → enrichment → LLM analysis
+    agent.go                          Plan-and-Execute pipeline: discovery → enrichment → linear per-addon LLM analysis
   cluster/
     cluster.go                        kubectl interaction, version detection, workload discovery
     cluster_test.go                   Chart version, image tag extraction tests
   fetch/
     fetch.go                          HTTP fetching, GitHub raw URL conversion, EOL data
     fetch_test.go                     GitHub URL conversion tests
+  resilience/
+    retry.go                          Shared retry policy, deterministic backoff, retry classifiers
+    retry_test.go                     Retry policy and retry behavior tests
   output/
     output.go                         JSON/HTML formatting, Status type, JSON extraction
     output_test.go                    Status round-trip, JSON backward compat tests

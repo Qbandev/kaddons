@@ -3,10 +3,9 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"github.com/qbandev/kaddons/internal/cluster"
 	"github.com/qbandev/kaddons/internal/fetch"
 	"github.com/qbandev/kaddons/internal/output"
+	"github.com/qbandev/kaddons/internal/resilience"
 	"google.golang.org/genai"
 )
 
@@ -169,83 +169,75 @@ func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addo
 	return analyzeCompatibility(ctx, client, model, k8sVersion, enriched, outputFormat, outputPath)
 }
 
-const analysisSystemPrompt = `You are a Kubernetes addon compatibility analyzer. You will receive pre-collected data about addons installed in a cluster, including their compatibility matrix page content when available.
-
-Your ONLY job is to analyze the provided data and determine compatibility. You must produce a strict JSON array (no markdown code fences, no extra text before or after) with this schema for EACH addon provided:
-
+const analysisSystemPrompt = `You are a deterministic Kubernetes addon compatibility analyzer.
+You will receive exactly ONE addon at a time with structured evidence.
+Return exactly one JSON object (no markdown, no code fences, no extra keys):
 {
   "name": "addon-name",
   "namespace": "namespace",
   "installed_version": "v1.2.3",
   "compatible": "true"|"false"|"unknown",
   "latest_compatible_version": "v1.2.5",
-  "note": "explanation with source citation, upgrade status, and support dates"
+  "note": "source-cited explanation"
 }
 
-You MUST use exact strings "true", "false", or "unknown" — not boolean literals or null.
-
 Rules:
-- You MUST include ALL addons from the input — do not skip any
-- "compatible" must be "unknown" if you cannot determine compatibility from the provided data
-- Only include "latest_compatible_version" if you found evidence in the compatibility page or EOL data
+- Use only evidence provided in input.
+- "compatible" must be string "true" | "false" | "unknown" only.
+- If evidence is insufficient, set "compatible" to "unknown".
+- Include source URL(s) in note when available.
+- Preserve addon identity fields exactly from input.
+- Output must be valid JSON object only.`
 
-Notes (source-cited, comprehensive):
-- "note" must cite the source URL and include all relevant context in a single field
-- Include the compatibility source URL citation: e.g. "The compatibility matrix at <URL> states v1.14 supports K8s 1.24-1.31."
-- When determinable from eol_data, include the supported-until date: e.g. "Supported until 2025-09-10."
-- When the installed version is confirmed incompatible, state upgrade-required status: e.g. "Upgrade required: <URL> states v0.14.x only supports K8s 1.32."
-- If the compatibility page lacks structured version data, explain what the page contained: e.g. "The page at <URL> is an installation guide without a version compatibility matrix."
-- If eol_data is provided, use it to determine version support status and latest version. Prefer the compatibility page for K8s-specific compatibility; use EOL data as supplementary context for version lifecycle
-- Base your analysis ONLY on the page content and EOL data provided — do not hallucinate compatibility information`
+var evidenceLinePattern = regexp.MustCompile(`(?i)(kubernetes|k8s|compat|support|version|matrix|tested|eol|lts|deprecated|upgrade|required)`)
 
 func analyzeCompatibility(ctx context.Context, client *genai.Client, model string, k8sVersion string, addons []addonWithInfo, outputFormat string, outputPath string) error {
-	dataPayload := struct {
-		K8sVersion string          `json:"k8s_version"`
-		Addons     []addonWithInfo `json:"addons"`
-	}{
-		K8sVersion: k8sVersion,
-		Addons:     addons,
+	results := make([]output.AddonCompatibility, 0, len(addons))
+	for addonIndex, addonInfo := range addons {
+		fmt.Fprintf(
+			os.Stderr,
+			"Analyzing addon %d/%d: %s (%s)\n",
+			addonIndex+1,
+			len(addons),
+			addonInfo.Name,
+			addonInfo.Namespace,
+		)
+		result, err := analyzeSingleAddon(ctx, client, model, k8sVersion, addonInfo)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: fallback to unknown for %s/%s due to analysis error: %v\n", addonInfo.Name, addonInfo.Namespace, err)
+			result = output.AddonCompatibility{
+				Name:             addonInfo.Name,
+				Namespace:        addonInfo.Namespace,
+				InstalledVersion: addonInfo.Version,
+				Compatible:       output.StatusUnknown,
+				Note:             fmt.Sprintf("Analysis error: %v", err),
+			}
+			if addonInfo.CompatibilityURL != "" {
+				result.Note += fmt.Sprintf(" Source: %s", addonInfo.CompatibilityURL)
+			}
+		}
+		fmt.Fprintf(
+			os.Stderr,
+			"Completed addon %d/%d: %s -> %s\n",
+			addonIndex+1,
+			len(addons),
+			result.Name,
+			result.Compatible,
+		)
+		results = append(results, result)
 	}
 
-	dataJSON, err := json.MarshalIndent(dataPayload, "", "  ")
+	resultsJSON, err := json.Marshal(results)
 	if err != nil {
-		return fmt.Errorf("marshaling addon data: %w", err)
+		return fmt.Errorf("marshaling linear analysis results: %w", err)
 	}
-
-	deterministicTemperature := float32(0)
-	deterministicTopP := float32(1)
-	deterministicTopK := float32(1)
-	deterministicSeed := int32(42)
-	config := &genai.GenerateContentConfig{
-		SystemInstruction: genai.NewContentFromText(analysisSystemPrompt, genai.RoleUser),
-		Temperature:       &deterministicTemperature,
-		TopP:              &deterministicTopP,
-		TopK:              &deterministicTopK,
-		Seed:              &deterministicSeed,
-		CandidateCount:    1,
-		ResponseMIMEType:  "application/json",
-	}
-
-	resp, err := generateContentWithRetry(ctx, client, model, []*genai.Content{
-		genai.NewContentFromText(
-			fmt.Sprintf("Analyze compatibility for these addons:\n\n%s", string(dataJSON)),
-			genai.RoleUser,
-		),
-	}, config)
-	if err != nil {
-		return fmt.Errorf("LLM analysis failed: %w", err)
-	}
-
-	raw := collectTextResponse(resp)
-	extracted := output.ExtractJSON(raw)
-
-	results, err := output.FormatOutput(extracted, k8sVersion, outputFormat, outputPath)
+	formattedResults, err := output.FormatOutput(string(resultsJSON), k8sVersion, outputFormat, outputPath)
 	if err != nil {
 		return err
 	}
 
 	var compatible, incompatible, unknown int
-	for _, result := range results {
+	for _, result := range formattedResults {
 		switch result.Compatible {
 		case output.StatusTrue:
 			compatible++
@@ -258,6 +250,112 @@ func analyzeCompatibility(ctx context.Context, client *genai.Client, model strin
 	fmt.Fprintf(os.Stderr, "Done: %d compatible, %d incompatible, %d unknown\n", compatible, incompatible, unknown)
 
 	return nil
+}
+
+type singleAddonAnalysisInput struct {
+	K8sVersion string                 `json:"k8s_version"`
+	Addon      map[string]interface{} `json:"addon"`
+}
+
+func analyzeSingleAddon(ctx context.Context, client *genai.Client, model, k8sVersion string, addonInfo addonWithInfo) (output.AddonCompatibility, error) {
+	prunedCompatibilityEvidence := pruneEvidenceText(addonInfo.CompatibilityContent, 7000, 60)
+	eolSummary := make([]string, 0, len(addonInfo.EOLData))
+	for index, cycle := range addonInfo.EOLData {
+		if index >= 6 {
+			break
+		}
+		eolSummary = append(eolSummary, fmt.Sprintf("cycle=%s latest=%s eol=%v releaseDate=%s", cycle.Cycle, cycle.Latest, cycle.EOL, cycle.ReleaseDate))
+	}
+
+	analysisInput := singleAddonAnalysisInput{
+		K8sVersion: k8sVersion,
+		Addon: map[string]interface{}{
+			"name":                    addonInfo.Name,
+			"namespace":               addonInfo.Namespace,
+			"installed_version":       addonInfo.Version,
+			"source":                  addonInfo.Source,
+			"compatibility_url":       addonInfo.CompatibilityURL,
+			"compatibility_excerpt":   prunedCompatibilityEvidence,
+			"fetch_error":             addonInfo.FetchError,
+			"eol_summary":             eolSummary,
+			"db_name":                 "",
+			"db_project_url":          "",
+			"db_repository":           "",
+			"db_compatibility_source": "",
+		},
+	}
+	if addonInfo.DBMatch != nil {
+		analysisInput.Addon["db_name"] = addonInfo.DBMatch.Name
+		analysisInput.Addon["db_project_url"] = addonInfo.DBMatch.ProjectURL
+		analysisInput.Addon["db_repository"] = addonInfo.DBMatch.Repository
+		analysisInput.Addon["db_compatibility_source"] = addonInfo.DBMatch.CompatibilityMatrixURL
+	}
+
+	inputJSON, err := json.MarshalIndent(analysisInput, "", "  ")
+	if err != nil {
+		return output.AddonCompatibility{}, fmt.Errorf("marshaling single-addon payload: %w", err)
+	}
+
+	deterministicTemperature := float32(0)
+	deterministicTopP := float32(1)
+	deterministicTopK := float32(1)
+	deterministicSeed := int32(42)
+	responseJSONSchema := map[string]interface{}{
+		"type": "object",
+		"required": []string{
+			"name",
+			"namespace",
+			"installed_version",
+			"compatible",
+			"note",
+		},
+		"properties": map[string]interface{}{
+			"name":                      map[string]interface{}{"type": "string"},
+			"namespace":                 map[string]interface{}{"type": "string"},
+			"installed_version":         map[string]interface{}{"type": "string"},
+			"compatible":                map[string]interface{}{"type": "string", "enum": []string{"true", "false", "unknown"}},
+			"latest_compatible_version": map[string]interface{}{"type": "string"},
+			"note":                      map[string]interface{}{"type": "string"},
+		},
+		"additionalProperties": false,
+	}
+
+	config := &genai.GenerateContentConfig{
+		SystemInstruction:  genai.NewContentFromText(analysisSystemPrompt, genai.RoleUser),
+		Temperature:        &deterministicTemperature,
+		TopP:               &deterministicTopP,
+		TopK:               &deterministicTopK,
+		Seed:               &deterministicSeed,
+		CandidateCount:     1,
+		ResponseMIMEType:   "application/json",
+		ResponseJsonSchema: responseJSONSchema,
+	}
+
+	resp, err := generateContentWithRetry(ctx, client, model, []*genai.Content{
+		genai.NewContentFromText(
+			fmt.Sprintf("Analyze compatibility for this addon:\n\n%s", string(inputJSON)),
+			genai.RoleUser,
+		),
+	}, config)
+	if err != nil {
+		return output.AddonCompatibility{}, err
+	}
+	raw := collectTextResponse(resp)
+	extracted := output.ExtractJSON(raw)
+	var result output.AddonCompatibility
+	if err := json.Unmarshal([]byte(extracted), &result); err != nil {
+		return output.AddonCompatibility{}, fmt.Errorf("parsing single-addon JSON output: %w", err)
+	}
+	if result.Name == "" {
+		result.Name = addonInfo.Name
+	}
+	if result.Namespace == "" {
+		result.Namespace = addonInfo.Namespace
+	}
+	if result.InstalledVersion == "" {
+		result.InstalledVersion = addonInfo.Version
+	}
+	return result, nil
 }
 
 func collectTextResponse(resp *genai.GenerateContentResponse) string {
@@ -278,6 +376,103 @@ func collectTextResponse(resp *genai.GenerateContentResponse) string {
 	return sb.String()
 }
 
+func pruneEvidenceText(input string, maxChars int, maxLines int) string {
+	trimmedInput := strings.TrimSpace(input)
+	if trimmedInput == "" {
+		return ""
+	}
+	normalizedLines := make([]string, 0)
+	for _, line := range strings.Split(trimmedInput, "\n") {
+		cleanLine := strings.Join(strings.Fields(strings.TrimSpace(line)), " ")
+		if cleanLine != "" {
+			normalizedLines = append(normalizedLines, cleanLine)
+		}
+	}
+	if len(normalizedLines) == 0 {
+		return ""
+	}
+
+	type lineWithIndex struct {
+		index int
+		text  string
+	}
+	selectedByIndex := make(map[int]string)
+
+	// Keep an initial deterministic header slice for context.
+	const leadingContextLines = 16
+	for lineIndex := 0; lineIndex < len(normalizedLines) && lineIndex < leadingContextLines; lineIndex++ {
+		selectedByIndex[lineIndex] = normalizedLines[lineIndex]
+	}
+
+	// Keep bounded context windows around keyword matches so we preserve table rows
+	// and nearby version ranges, not only keyword lines.
+	const contextBefore = 2
+	const contextAfter = 2
+	for lineIndex, line := range normalizedLines {
+		if !evidenceLinePattern.MatchString(line) {
+			continue
+		}
+		windowStart := lineIndex - contextBefore
+		if windowStart < 0 {
+			windowStart = 0
+		}
+		windowEnd := lineIndex + contextAfter
+		if windowEnd >= len(normalizedLines) {
+			windowEnd = len(normalizedLines) - 1
+		}
+		for contextLineIndex := windowStart; contextLineIndex <= windowEnd; contextLineIndex++ {
+			selectedByIndex[contextLineIndex] = normalizedLines[contextLineIndex]
+		}
+	}
+
+	orderedSelected := make([]lineWithIndex, 0, len(selectedByIndex))
+	for lineIndex, lineText := range selectedByIndex {
+		orderedSelected = append(orderedSelected, lineWithIndex{
+			index: lineIndex,
+			text:  lineText,
+		})
+	}
+	sort.SliceStable(orderedSelected, func(leftIndex, rightIndex int) bool {
+		return orderedSelected[leftIndex].index < orderedSelected[rightIndex].index
+	})
+
+	selectedLines := make([]string, 0, len(orderedSelected))
+	for _, line := range orderedSelected {
+		selectedLines = append(selectedLines, line.text)
+	}
+	if len(selectedLines) == 0 {
+		selectedLines = normalizedLines
+	}
+	if maxLines > 0 && len(selectedLines) > maxLines {
+		selectedLines = selectedLines[:maxLines]
+	}
+
+	// If keyword extraction produced too little content, include more leading lines deterministically.
+	if len(selectedLines) < 12 {
+		fallbackLines := normalizedLines
+		if len(fallbackLines) > maxLines {
+			fallbackLines = fallbackLines[:maxLines]
+		}
+		selectedLines = fallbackLines
+	}
+
+	var builder strings.Builder
+	for _, line := range selectedLines {
+		if builder.Len() > 0 {
+			builder.WriteString("\n")
+		}
+		if maxChars > 0 && builder.Len()+len(line) > maxChars {
+			remaining := maxChars - builder.Len()
+			if remaining > 0 {
+				builder.WriteString(line[:remaining])
+			}
+			break
+		}
+		builder.WriteString(line)
+	}
+	return strings.TrimSpace(builder.String())
+}
+
 func generateContentWithRetry(
 	ctx context.Context,
 	client *genai.Client,
@@ -285,42 +480,38 @@ func generateContentWithRetry(
 	contents []*genai.Content,
 	config *genai.GenerateContentConfig,
 ) (*genai.GenerateContentResponse, error) {
-	const maxAttempts = 3
-	backoff := []time.Duration{0, time.Second, 2 * time.Second}
-	var lastErr error
-
-	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		if backoff[attempt-1] > 0 {
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(backoff[attempt-1]):
+	const perAttemptTimeout = 90 * time.Second
+	policy := resilience.RetryPolicy{
+		Attempts:     3,
+		InitialDelay: time.Second,
+		MaxDelay:     2 * time.Second,
+		Multiplier:   2,
+	}
+	attemptCounter := 0
+	return resilience.RetryWithResult(ctx, policy, isTransientLLMError, func(callCtx context.Context) (*genai.GenerateContentResponse, error) {
+		attemptCounter++
+		attemptContext, cancelAttempt := context.WithTimeout(callCtx, perAttemptTimeout)
+		response, err := client.Models.GenerateContent(attemptContext, model, contents, config)
+		cancelAttempt()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Gemini analysis attempt %d/%d failed: %v\n", attemptCounter, policy.Attempts, err)
+			if isTransientLLMError(err) && attemptCounter < policy.Attempts {
+				fmt.Fprintln(os.Stderr, "Retrying Gemini analysis...")
 			}
-		}
-
-		resp, err := client.Models.GenerateContent(ctx, model, contents, config)
-		if err == nil {
-			return resp, nil
-		}
-		lastErr = err
-		if !isTransientLLMError(err) {
 			return nil, err
 		}
-	}
-
-	return nil, lastErr
+		return response, nil
+	})
 }
 
 func isTransientLLMError(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, io.EOF) {
+	if resilience.IsRetryableNetworkError(err) {
 		return true
 	}
-	message := strings.ToLower(err.Error())
-	return strings.Contains(message, "unexpected eof") ||
-		strings.Contains(message, "timeout") ||
-		strings.Contains(message, "temporary") ||
-		strings.Contains(message, "connection reset by peer")
+	errorText := strings.ToLower(err.Error())
+	return strings.Contains(errorText, "resource_exhausted") ||
+		strings.Contains(errorText, "429") ||
+		strings.Contains(errorText, "503") ||
+		strings.Contains(errorText, "500") ||
+		strings.Contains(errorText, "unavailable")
 }

@@ -98,8 +98,20 @@ Done: 8 compatible, 2 incompatible, 2 unknown
 
 The `Done: ...` summary is printed as the final stderr line after output is fully written.
 
+Gemini analysis is executed one addon at a time in deterministic sorted order under the same `Analyzing with ...` stage.
+
 This keeps stdout clean for piping JSON output to other tools:
 
 ```bash
 kaddons | jq '.addons[] | select(.compatible == "false")'
 ```
+
+## Retry and timeout policy
+
+All external calls use a shared deterministic retry policy (`internal/resilience`):
+
+- **Gemini calls**: 3 attempts, per-attempt timeout 90s, backoff 1s then 2s
+- **HTTP fetch/EOL/validate calls**: 3 attempts, backoff 500ms then 1s
+- **kubectl calls**: 3 attempts, backoff 500ms then 1s
+
+Retryable conditions include transient transport errors (`timeout`, `EOF`, connection resets), plus HTTP `429` and `5xx`.

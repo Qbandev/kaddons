@@ -7,6 +7,9 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
+
+	"github.com/qbandev/kaddons/internal/resilience"
 )
 
 // DetectedAddon represents a workload discovered from the cluster.
@@ -19,7 +22,7 @@ type DetectedAddon struct {
 
 // GetClusterVersion runs kubectl version and returns major.minor string.
 func GetClusterVersion(ctx context.Context) (string, error) {
-	out, err := exec.CommandContext(ctx, "kubectl", "version", "--output=json").Output() // #nosec G204 -- kubectl is a well-known binary, not user-controlled input
+	out, err := runKubectlCommandWithRetry(ctx, "version", "--output=json")
 	if err != nil {
 		return "", fmt.Errorf("kubectl version failed: %w", err)
 	}
@@ -66,7 +69,7 @@ func ListInstalledAddons(ctx context.Context, namespace string) ([]DetectedAddon
 
 	for _, q := range queries {
 		cmdArgs := append([]string{"get", q.resource, "-o", "json"}, nsFlag...)
-		out, err := exec.CommandContext(ctx, "kubectl", cmdArgs...).Output() // #nosec G204 -- kubectl is a well-known binary, not user-controlled input
+		out, err := runKubectlCommandWithRetry(ctx, cmdArgs...)
 		if err != nil {
 			if q.isCRD {
 				continue
@@ -150,6 +153,26 @@ func ListInstalledAddons(ctx context.Context, namespace string) ([]DetectedAddon
 	}
 
 	return addons, nil
+}
+
+func runKubectlCommandWithRetry(ctx context.Context, args ...string) ([]byte, error) {
+	policy := resilience.RetryPolicy{
+		Attempts:     3,
+		InitialDelay: 500 * time.Millisecond,
+		MaxDelay:     time.Second,
+		Multiplier:   2,
+	}
+	return resilience.RetryWithResult(ctx, policy, isRetryableKubectlError, func(callCtx context.Context) ([]byte, error) {
+		output, err := exec.CommandContext(callCtx, "kubectl", args...).Output() // #nosec G204 -- kubectl is a well-known binary, not user-controlled input
+		if err == nil {
+			return output, nil
+		}
+		return nil, err
+	})
+}
+
+func isRetryableKubectlError(err error) bool {
+	return resilience.IsRetryableNetworkError(err)
 }
 
 func stripChartVersion(chart string) string {

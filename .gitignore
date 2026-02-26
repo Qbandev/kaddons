@@ -6,3 +6,4 @@ kaddons-validate
 dist/
 .gocache/
 .gopath/
+kaddons-report.html

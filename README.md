@@ -11,7 +11,7 @@ kaddons uses a three-phase **Plan-and-Execute** pipeline. Phases 1 and 2 are ful
 ```
 Phase 1: Discovery        kubectl → detect K8s version + installed workloads
 Phase 2: Enrichment       Match against 668-addon DB, fetch compat pages + EOL data
-Phase 3: Analysis         Single Gemini call → compatibility verdicts
+Phase 3: Analysis         Linear per-addon Gemini calls → compatibility verdicts
 ```
 
 See [docs/architecture.md](docs/architecture.md) for the full data flow.
@@ -140,7 +140,7 @@ A [GitHub Actions workflow](.github/workflows/linkcheck.yml) runs link checks we
 
 ## Accuracy and limitations
 
-The LLM reads each addon's official compatibility page and extracts version support information. It returns `"unknown"` rather than guessing when data is unclear. Results should be treated as a **triage tool** — verify critical decisions against the official documentation linked in each `note` field.
+The LLM reads each addon's official compatibility page and extracts version support information. Analysis is deterministic in ordering and context construction, and each addon is evaluated independently with bounded retries/timeouts. It returns `"unknown"` rather than guessing when data is unclear. Results should be treated as a **triage tool** — verify critical decisions against the official documentation linked in each `note` field.
 
 ## Documentation
 

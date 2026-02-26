@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/qbandev/kaddons/internal/addon"
+	"github.com/qbandev/kaddons/internal/resilience"
 )
 
 var htmlTagRe = regexp.MustCompile(`<[^>]*>`)
@@ -104,8 +105,9 @@ func CompatibilityPageWithClient(ctx context.Context, client *http.Client, pageU
 	if err != nil {
 		return "", fmt.Errorf("creating request: %w", err)
 	}
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8")
 
-	resp, err := client.Do(req) // #nosec G704 -- URL is pre-validated by ValidatePublicHTTPSURL
+	resp, err := doRequestWithRetry(ctx, client, req)
 	if err != nil {
 		return "", fmt.Errorf("HTTP request failed: %w", err)
 	}
@@ -142,8 +144,7 @@ func EOLData(ctx context.Context, product string) ([]addon.EOLCycle, error) {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
-
-	resp, err := client.Do(req) // #nosec G704 -- endoflife.date API URL is fixed and not user-controlled
+	resp, err := doRequestWithRetry(ctx, client, req)
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
@@ -180,8 +181,7 @@ func EOLProducts(ctx context.Context) ([]addon.EOLProductCatalogEntry, error) {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
-
-	resp, err := client.Do(req) // #nosec G704 -- endoflife.date API URL is fixed and not user-controlled
+	resp, err := doRequestWithRetry(ctx, client, req)
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
@@ -210,4 +210,38 @@ func parseEOLProducts(body []byte) ([]addon.EOLProductCatalogEntry, error) {
 		return nil, fmt.Errorf("parsing EOL product catalog: %w", err)
 	}
 	return parsed.Result, nil
+}
+
+func doRequestWithRetry(ctx context.Context, client *http.Client, request *http.Request) (*http.Response, error) {
+	policy := resilience.RetryPolicy{
+		Attempts:     3,
+		InitialDelay: 500 * time.Millisecond,
+		MaxDelay:     time.Second,
+		Multiplier:   2,
+	}
+	attemptCounter := 0
+	return resilience.RetryWithResult(ctx, policy, isRetryableHTTPError, func(callCtx context.Context) (*http.Response, error) {
+		attemptCounter++
+		reqForAttempt := request.Clone(callCtx)
+		resp, err := client.Do(reqForAttempt) // #nosec G704 -- request URLs are validated/fixed by callers
+		if err != nil {
+			return nil, err
+		}
+		if isRetryableHTTPStatus(resp.StatusCode) {
+			if attemptCounter >= policy.Attempts {
+				return resp, nil
+			}
+			_ = resp.Body.Close()
+			return nil, fmt.Errorf("retryable HTTP status %d", resp.StatusCode)
+		}
+		return resp, nil
+	})
+}
+
+func isRetryableHTTPStatus(statusCode int) bool {
+	return resilience.IsRetryableHTTPStatus(statusCode)
+}
+
+func isRetryableHTTPError(err error) bool {
+	return resilience.IsRetryableNetworkError(err) || strings.Contains(strings.ToLower(err.Error()), "retryable http status")
 }
