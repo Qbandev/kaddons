@@ -55,6 +55,33 @@ func TestPruneEvidenceText_KeepsContextAroundKeywordLines(t *testing.T) {
 	}
 }
 
+func TestPruneEvidenceText_PrioritizesStrongLateCompatibilitySignals(t *testing.T) {
+	inputLines := []string{
+		"intro line 1",
+		"intro line 2",
+		"intro line 3",
+		"intro line 4",
+		"intro line 5",
+		"intro line 6",
+		"intro line 7",
+		"intro line 8",
+		"intro line 9",
+		"intro line 10",
+		"intro line 11",
+		"intro line 12",
+		"random setup text",
+		"another non-matrix line",
+		"Tested versions",
+		"Argo CD version | Kubernetes versions",
+		"3.3 | v1.34, v1.33, v1.32, v1.31",
+	}
+
+	got := pruneEvidenceText(strings.Join(inputLines, "\n"), 4000, 16)
+	if !strings.Contains(got, "v1.31") {
+		t.Fatalf("expected late strong compatibility line to be included, got %q", got)
+	}
+}
+
 func TestIsTransientLLMError_ClassifiesRetryable(t *testing.T) {
 	if !isTransientLLMError(errors.New("unexpected EOF")) {
 		t.Fatalf("expected EOF-like error to be retryable")

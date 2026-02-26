@@ -191,6 +191,10 @@ Rules:
 - Output must be valid JSON object only.`
 
 var evidenceLinePattern = regexp.MustCompile(`(?i)(kubernetes|k8s|compat|support|version|matrix|tested|eol|lts|deprecated|upgrade|required)`)
+var evidenceK8sPattern = regexp.MustCompile(`(?i)\b(kubernetes|k8s)\b`)
+var evidenceVersionPattern = regexp.MustCompile(`(?i)\bv?\d+\.\d+(?:\.\d+)?\b`)
+var evidenceSupportPattern = regexp.MustCompile(`(?i)(compat|support|matrix|tested|require|recommended)`)
+var evidenceNegationPattern = regexp.MustCompile(`(?i)(non[- ]matrix|without (?:a )?(?:compatibility|support|version|matrix)|no (?:compatibility|support|version|matrix)|does not (?:contain|include)|lacks?)`)
 
 func analyzeCompatibility(ctx context.Context, client *genai.Client, model string, k8sVersion string, addons []addonWithInfo, outputFormat string, outputPath string) error {
 	results := make([]output.AddonCompatibility, 0, len(addons))
@@ -260,6 +264,16 @@ type singleAddonAnalysisInput struct {
 
 func analyzeSingleAddon(ctx context.Context, client *genai.Client, model, k8sVersion string, addonInfo addonWithInfo) (output.AddonCompatibility, error) {
 	prunedCompatibilityEvidence := pruneEvidenceText(addonInfo.CompatibilityContent, 7000, 60)
+	fmt.Fprintf(
+		os.Stderr,
+		"Evidence for %s: lines=%d chars=%d has_k8s=%t has_versions=%t fetch_error=%t\n",
+		addonInfo.Name,
+		countNonEmptyLines(prunedCompatibilityEvidence),
+		len(prunedCompatibilityEvidence),
+		evidenceK8sPattern.MatchString(prunedCompatibilityEvidence),
+		evidenceVersionPattern.MatchString(prunedCompatibilityEvidence),
+		addonInfo.FetchError != "",
+	)
 	eolSummary := make([]string, 0, len(addonInfo.EOLData))
 	for index, cycle := range addonInfo.EOLData {
 		if index >= 6 {
@@ -393,68 +407,108 @@ func pruneEvidenceText(input string, maxChars int, maxLines int) string {
 		return ""
 	}
 
-	type lineWithIndex struct {
+	type scoredAnchor struct {
 		index int
-		text  string
+		score int
 	}
-	selectedByIndex := make(map[int]string)
+	lineBudget := maxLines
+	if lineBudget <= 0 || lineBudget > len(normalizedLines) {
+		lineBudget = len(normalizedLines)
+	}
+	selectedByIndex := make(map[int]bool, lineBudget)
+	selectedCount := 0
+	addLine := func(lineIndex int) {
+		if lineIndex < 0 || lineIndex >= len(normalizedLines) {
+			return
+		}
+		if selectedCount >= lineBudget {
+			return
+		}
+		if selectedByIndex[lineIndex] {
+			return
+		}
+		selectedByIndex[lineIndex] = true
+		selectedCount++
+	}
 
-	// Keep an initial deterministic header slice for context.
-	const leadingContextLines = 16
+	// Keep a deterministic header slice for document context.
+	const leadingContextLines = 12
 	for lineIndex := 0; lineIndex < len(normalizedLines) && lineIndex < leadingContextLines; lineIndex++ {
-		selectedByIndex[lineIndex] = normalizedLines[lineIndex]
+		addLine(lineIndex)
 	}
 
-	// Keep bounded context windows around keyword matches so we preserve table rows
-	// and nearby version ranges, not only keyword lines.
-	const contextBefore = 2
-	const contextAfter = 2
+	anchors := make([]scoredAnchor, 0, len(normalizedLines))
 	for lineIndex, line := range normalizedLines {
-		if !evidenceLinePattern.MatchString(line) {
-			continue
+		score := 0
+		hasK8s := evidenceK8sPattern.MatchString(line)
+		hasVersion := evidenceVersionPattern.MatchString(line)
+		hasSupportSignal := evidenceSupportPattern.MatchString(line)
+		if hasK8s && hasVersion {
+			score += 5
 		}
-		windowStart := lineIndex - contextBefore
-		if windowStart < 0 {
-			windowStart = 0
+		if hasSupportSignal {
+			score += 3
 		}
-		windowEnd := lineIndex + contextAfter
-		if windowEnd >= len(normalizedLines) {
-			windowEnd = len(normalizedLines) - 1
+		if hasVersion {
+			score += 2
 		}
-		for contextLineIndex := windowStart; contextLineIndex <= windowEnd; contextLineIndex++ {
-			selectedByIndex[contextLineIndex] = normalizedLines[contextLineIndex]
+		if evidenceLinePattern.MatchString(line) {
+			score += 1
+		}
+		if evidenceNegationPattern.MatchString(line) {
+			score -= 4
+		}
+		if score > 0 {
+			anchors = append(anchors, scoredAnchor{
+				index: lineIndex,
+				score: score,
+			})
 		}
 	}
-
-	orderedSelected := make([]lineWithIndex, 0, len(selectedByIndex))
-	for lineIndex, lineText := range selectedByIndex {
-		orderedSelected = append(orderedSelected, lineWithIndex{
-			index: lineIndex,
-			text:  lineText,
-		})
-	}
-	sort.SliceStable(orderedSelected, func(leftIndex, rightIndex int) bool {
-		return orderedSelected[leftIndex].index < orderedSelected[rightIndex].index
+	sort.SliceStable(anchors, func(leftIndex, rightIndex int) bool {
+		left := anchors[leftIndex]
+		right := anchors[rightIndex]
+		if left.score == right.score {
+			return left.index < right.index
+		}
+		return left.score > right.score
 	})
 
-	selectedLines := make([]string, 0, len(orderedSelected))
-	for _, line := range orderedSelected {
-		selectedLines = append(selectedLines, line.text)
+	// Preserve table rows and neighboring values around strongest anchors first.
+	const contextBefore = 2
+	const contextAfter = 2
+	for _, anchor := range anchors {
+		if selectedCount >= lineBudget {
+			break
+		}
+		// Add anchor first, then nearest context lines around it.
+		addLine(anchor.index)
+		for offset := 1; offset <= contextBefore || offset <= contextAfter; offset++ {
+			if offset <= contextAfter {
+				addLine(anchor.index + offset)
+			}
+			if offset <= contextBefore {
+				addLine(anchor.index - offset)
+			}
+		}
+	}
+
+	// Fill remaining slots deterministically from the start.
+	for lineIndex := 0; lineIndex < len(normalizedLines) && selectedCount < lineBudget; lineIndex++ {
+		addLine(lineIndex)
+	}
+
+	orderedLineIndexes := make([]int, 0, len(selectedByIndex))
+	for lineIndex := range selectedByIndex {
+		orderedLineIndexes = append(orderedLineIndexes, lineIndex)
+	}
+	sort.Ints(orderedLineIndexes)
+	selectedLines := make([]string, 0, len(orderedLineIndexes))
+	for _, lineIndex := range orderedLineIndexes {
+		selectedLines = append(selectedLines, normalizedLines[lineIndex])
 	}
 	if len(selectedLines) == 0 {
 		selectedLines = normalizedLines
-	}
-	if maxLines > 0 && len(selectedLines) > maxLines {
-		selectedLines = selectedLines[:maxLines]
-	}
-
-	// If keyword extraction produced too little content, include more leading lines deterministically.
-	if len(selectedLines) < 12 {
-		fallbackLines := normalizedLines
-		if len(fallbackLines) > maxLines {
-			fallbackLines = fallbackLines[:maxLines]
-		}
-		selectedLines = fallbackLines
 	}
 
 	var builder strings.Builder
@@ -472,6 +526,20 @@ func pruneEvidenceText(input string, maxChars int, maxLines int) string {
 		builder.WriteString(line)
 	}
 	return strings.TrimSpace(builder.String())
+}
+
+func countNonEmptyLines(text string) int {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return 0
+	}
+	count := 0
+	for _, line := range strings.Split(trimmed, "\n") {
+		if strings.TrimSpace(line) != "" {
+			count++
+		}
+	}
+	return count
 }
 
 func truncateToValidUTF8Prefix(text string, maxBytes int) string {
