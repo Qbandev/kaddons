@@ -123,6 +123,8 @@ The `note` field always cites its source URL and includes support-until dates wh
 
 Writes a styled report to `./kaddons-report.html` by default (or to `--output-path` if specified). JSON output remains the default for stdout pipelines.
 
+![HTML report example](docs/images/kaddons-report-example.png)
+
 ## Database validation (development tool)
 
 A separate `kaddons-validate` binary checks the addon database for URL health and compatibility matrix content. It is not shipped with releases — it's a development and CI tool.

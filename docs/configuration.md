@@ -82,6 +82,8 @@ The `compatible` field is always a JSON string, never a boolean or null. This is
 
 Activated with `-o html`. Writes a styled report file to `./kaddons-report.html` by default, or to the `--output-path` location.
 
+![HTML report example](images/kaddons-report-example.png)
+
 ## Progress output
 
 Progress messages are written to stderr during execution:
