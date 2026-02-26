@@ -41,7 +41,7 @@ func RetryWithResult[T any](
 	if attempts <= 0 {
 		attempts = 1
 	}
-	if policy.Multiplier <= 1 {
+	if policy.Multiplier <= 0 {
 		policy.Multiplier = 2
 	}
 	if policy.InitialDelay < 0 {
