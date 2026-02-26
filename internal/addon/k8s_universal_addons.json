@@ -25,14 +25,14 @@
       "name": "KServe",
       "project_url": "https://kserve.github.io/website/",
       "repository": "https://github.com/kserve/kserve",
-      "compatibility_matrix_url": "https://kserve.github.io/website/latest/admin/serverless/serverless/",
+      "compatibility_matrix_url": "https://kserve.github.io/website/docs/admin-guide/serverless",
       "changelog_location": "https://github.com/kserve/kserve/releases"
     },
     {
       "name": "Seldon Core",
       "project_url": "https://www.seldon.io/solutions/open-source-projects/core",
       "repository": "https://github.com/SeldonIO/seldon-core",
-      "compatibility_matrix_url": "https://docs.seldon.io/projects/seldon-core/en/latest/install/index.html",
+      "compatibility_matrix_url": "https://docs.seldon.ai/seldon-core-2/installation/installation",
       "changelog_location": "https://github.com/SeldonIO/seldon-core/releases"
     },
     {
@@ -46,7 +46,7 @@
       "name": "Keda HTTP Add-on",
       "project_url": "https://github.com/kedacore/http-add-on",
       "repository": "https://github.com/kedacore/http-add-on",
-      "compatibility_matrix_url": "https://github.com/kedacore/http-add-on#readme",
+      "compatibility_matrix_url": "https://keda.sh/docs/2.16/operate/cluster/",
       "changelog_location": "https://github.com/kedacore/http-add-on/releases"
     },
     {
@@ -270,7 +270,7 @@
       "name": "Flagger",
       "project_url": "https://flagger.app/",
       "repository": "https://github.com/fluxcd/flagger",
-      "compatibility_matrix_url": "https://docs.flagger.app/install/flagger-install-on-kubernetes",
+      "compatibility_matrix_url": "https://fluxcd.io/flagger/install/flagger-install-on-kubernetes/",
       "changelog_location": "https://github.com/fluxcd/flagger/releases"
     },
     {
@@ -347,7 +347,7 @@
       "name": "vSphere CSI Driver",
       "project_url": "https://github.com/kubernetes-sigs/vsphere-csi-driver",
       "repository": "https://github.com/kubernetes-sigs/vsphere-csi-driver",
-      "compatibility_matrix_url": "https://docs.vmware.com/en/VMware-vSphere-Container-Storage-Plug-in/index.html",
+      "compatibility_matrix_url": "https://techdocs.broadcom.com/us/en/vmware-cis/vsphere/container-storage-plugin/3-0/getting-started-with-vmware-vsphere-container-storage-plug-in-3-0/vsphere-container-storage-plug-in-concepts/compatibility-matrix-for-vsphere-container-storage-plug-in.html",
       "changelog_location": "https://github.com/kubernetes-sigs/vsphere-csi-driver/releases"
     },
     {
@@ -648,7 +648,7 @@
       "name": "CAST AI",
       "project_url": "https://cast.ai/",
       "repository": "https://github.com/castai/cluster-controller",
-      "compatibility_matrix_url": "https://docs.cast.ai/docs/prerequisites",
+      "compatibility_matrix_url": "https://docs.cast.ai/docs/upgrading-kubernetes-version",
       "changelog_location": "https://docs.cast.ai/changelog/"
     },
     {
@@ -711,7 +711,7 @@
       "name": "CloudNativePG",
       "project_url": "https://cloudnative-pg.io/",
       "repository": "https://github.com/cloudnative-pg/cloudnative-pg",
-      "compatibility_matrix_url": "https://cloudnative-pg.io/docs/latest/supported_releases/",
+      "compatibility_matrix_url": "https://cloudnative-pg.io/documentation/current/supported_releases/",
       "changelog_location": "https://github.com/cloudnative-pg/cloudnative-pg/releases"
     },
     {
@@ -725,7 +725,7 @@
       "name": "Crunchy PGO (Postgres Operator)",
       "project_url": "https://access.crunchydata.com/documentation/postgres-operator/latest/",
       "repository": "https://github.com/CrunchyData/postgres-operator",
-      "compatibility_matrix_url": "https://access.crunchydata.com/documentation/postgres-operator/latest/installation/prerequisites/",
+      "compatibility_matrix_url": "https://access.crunchydata.com/documentation/postgres-operator/latest/references/components",
       "changelog_location": "https://github.com/CrunchyData/postgres-operator/releases"
     },
     {
@@ -795,7 +795,7 @@
       "name": "ScyllaDB Operator",
       "project_url": "https://operator.docs.scylladb.com/",
       "repository": "https://github.com/scylladb/scylla-operator",
-      "compatibility_matrix_url": "https://operator.docs.scylladb.com/stable/generic.html",
+      "compatibility_matrix_url": "https://operator.docs.scylladb.com/stable/support/releases.html",
       "changelog_location": "https://github.com/scylladb/scylla-operator/releases"
     },
     {
@@ -865,14 +865,14 @@
       "name": "Apache Solr Operator",
       "project_url": "https://solr.apache.org/operator/",
       "repository": "https://github.com/apache/solr-operator",
-      "compatibility_matrix_url": "https://solr.apache.org/operator/articles/explore.html",
+      "compatibility_matrix_url": "https://apache.github.io/solr-operator/docs/upgrade-notes.html",
       "changelog_location": "https://github.com/apache/solr-operator/releases"
     },
     {
       "name": "Elasticsearch Operator (ECK)",
       "project_url": "https://www.elastic.co/guide/en/cloud-on-k8s/current/index.html",
       "repository": "https://github.com/elastic/cloud-on-k8s",
-      "compatibility_matrix_url": "https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s_supported-versions.html",
+      "compatibility_matrix_url": "https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-overview.html",
       "changelog_location": "https://github.com/elastic/cloud-on-k8s/releases"
     },
     {
@@ -935,7 +935,7 @@
       "name": "Skaffold",
       "project_url": "https://skaffold.dev/",
       "repository": "https://github.com/GoogleContainerTools/skaffold",
-      "compatibility_matrix_url": "https://skaffold.dev/docs/references/compatibility/",
+      "compatibility_matrix_url": "https://github.com/GoogleContainerTools/skaffold#readme",
       "changelog_location": "https://github.com/GoogleContainerTools/skaffold/releases"
     },
     {
@@ -1117,14 +1117,14 @@
       "name": "Cilium ClusterMesh",
       "project_url": "https://docs.cilium.io/en/stable/network/clustermesh/",
       "repository": "https://github.com/cilium/cilium",
-      "compatibility_matrix_url": "https://docs.cilium.io/en/stable/network/clustermesh/clustermesh/#prerequisites",
+      "compatibility_matrix_url": "https://docs.cilium.io/en/stable/network/kubernetes/compatibility/",
       "changelog_location": "https://github.com/cilium/cilium/releases"
     },
     {
       "name": "Cilium Network Policy",
       "project_url": "https://docs.cilium.io/en/stable/security/policy/",
       "repository": "https://github.com/cilium/cilium",
-      "compatibility_matrix_url": "https://docs.cilium.io/en/stable/network/kubernetes/policy/#kubernetes-policies",
+      "compatibility_matrix_url": "https://docs.cilium.io/en/stable/network/kubernetes/compatibility/",
       "changelog_location": "https://github.com/cilium/cilium/releases"
     },
     {
@@ -1145,7 +1145,7 @@
       "name": "Istio Ambient Mesh",
       "project_url": "https://istio.io/latest/docs/ambient/",
       "repository": "https://github.com/istio/istio",
-      "compatibility_matrix_url": "https://istio.io/latest/docs/ambient/install/",
+      "compatibility_matrix_url": "https://istio.io/latest/docs/releases/supported-releases/",
       "changelog_location": "https://github.com/istio/istio/releases"
     },
     {
@@ -1334,7 +1334,7 @@
       "name": "Cert-Manager Trust Manager",
       "project_url": "https://cert-manager.io/docs/trust/trust-manager/",
       "repository": "https://github.com/cert-manager/trust-manager",
-      "compatibility_matrix_url": "https://cert-manager.io/docs/trust/trust-manager/#supported-kubernetes-versions",
+      "compatibility_matrix_url": "https://cert-manager.io/docs/releases/",
       "changelog_location": "https://github.com/cert-manager/trust-manager/releases"
     },
     {
@@ -1411,7 +1411,7 @@
       "name": "Harbor",
       "project_url": "https://goharbor.io/",
       "repository": "https://github.com/goharbor/harbor",
-      "compatibility_matrix_url": "https://goharbor.io/docs/latest/install-config/harbor-compatibility-list/",
+      "compatibility_matrix_url": "https://github.com/goharbor/harbor-helm",
       "changelog_location": "https://github.com/goharbor/harbor/releases"
     },
     {
@@ -1502,7 +1502,7 @@
       "name": "Chaos Mesh",
       "project_url": "https://chaos-mesh.org/",
       "repository": "https://github.com/chaos-mesh/chaos-mesh",
-      "compatibility_matrix_url": "https://chaos-mesh.org/docs/#supported-kubernetes-versions",
+      "compatibility_matrix_url": "https://chaos-mesh.org/supported-releases/",
       "changelog_location": "https://github.com/chaos-mesh/chaos-mesh/releases"
     },
     {
@@ -1586,7 +1586,7 @@
       "name": "Kubecost",
       "project_url": "https://www.kubecost.com/",
       "repository": "https://github.com/kubecost/cost-model",
-      "compatibility_matrix_url": "https://docs.kubecost.com/install-and-configure/install#kubernetes-cluster-requirements",
+      "compatibility_matrix_url": "https://docs.kubecost.com/install-and-configure/install/environment",
       "changelog_location": "https://github.com/kubecost/cost-model/releases"
     },
     {
@@ -1887,7 +1887,7 @@
       "name": "Hubble",
       "project_url": "https://github.com/cilium/hubble",
       "repository": "https://github.com/cilium/hubble",
-      "compatibility_matrix_url": "https://docs.cilium.io/en/stable/network/hubble/setup/",
+      "compatibility_matrix_url": "https://docs.cilium.io/en/stable/network/kubernetes/compatibility/",
       "changelog_location": "https://github.com/cilium/hubble/releases"
     },
     {
@@ -1929,14 +1929,14 @@
       "name": "Kepler",
       "project_url": "https://sustainable-computing.io/",
       "repository": "https://github.com/sustainable-computing-io/kepler",
-      "compatibility_matrix_url": "https://sustainable-computing.io/installation/kepler-helm/",
+      "compatibility_matrix_url": "https://sustainable-computing.io/kepler/installation/guide/",
       "changelog_location": "https://github.com/sustainable-computing-io/kepler/releases"
     },
     {
       "name": "Kiali",
       "project_url": "https://www.kiali.io/",
       "repository": "https://github.com/kiali/kiali",
-      "compatibility_matrix_url": "https://kiali.io/docs/installation/installation-guide/#prerequisites",
+      "compatibility_matrix_url": "https://kiali.io/docs/installation/installation-guide/prerequisites/",
       "changelog_location": "https://github.com/kiali/kiali/releases"
     },
     {
@@ -1999,7 +1999,7 @@
       "name": "M3",
       "project_url": "https://www.m3db.io/",
       "repository": "https://github.com/m3db/m3",
-      "compatibility_matrix_url": "https://m3db.io/docs/operator/",
+      "compatibility_matrix_url": "https://m3db.io/docs/operator/getting_started/requirements/",
       "changelog_location": "https://github.com/m3db/m3/releases"
     },
     {
@@ -2062,7 +2062,7 @@
       "name": "Odigos",
       "project_url": "https://odigos.io",
       "repository": "https://github.com/odigos-io/odigos",
-      "compatibility_matrix_url": "https://docs.odigos.io/intro#prerequisites",
+      "compatibility_matrix_url": "https://docs.odigos.io/setup/system-requirements",
       "changelog_location": "https://github.com/odigos-io/odigos/releases"
     },
     {
@@ -2328,21 +2328,21 @@
       "name": "Kubebuilder",
       "project_url": "https://book.kubebuilder.io/",
       "repository": "https://github.com/kubernetes-sigs/kubebuilder",
-      "compatibility_matrix_url": "https://book.kubebuilder.io/reference/envtest#configuring-envtest-for-integration-tests",
+      "compatibility_matrix_url": "https://book.kubebuilder.io/versions_compatibility_supportability",
       "changelog_location": "https://github.com/kubernetes-sigs/kubebuilder/releases"
     },
     {
       "name": "Operator SDK",
       "project_url": "https://sdk.operatorframework.io/",
       "repository": "https://github.com/operator-framework/operator-sdk",
-      "compatibility_matrix_url": "https://sdk.operatorframework.io/docs/installation/#prerequisites",
+      "compatibility_matrix_url": "https://sdk.operatorframework.io/docs/overview/",
       "changelog_location": "https://github.com/operator-framework/operator-sdk/releases"
     },
     {
       "name": "Operator Lifecycle Manager (OLM)",
       "project_url": "https://olm.operatorframework.io/",
       "repository": "https://github.com/operator-framework/operator-lifecycle-manager",
-      "compatibility_matrix_url": "https://olm.operatorframework.io/docs/advanced-tasks/version-resolution/",
+      "compatibility_matrix_url": "https://olm.operatorframework.io/docs/getting-started/",
       "changelog_location": "https://github.com/operator-framework/operator-lifecycle-manager/releases"
     },
     {
@@ -2405,7 +2405,7 @@
       "name": "Envoy Gateway",
       "project_url": "https://gateway.envoyproxy.io",
       "repository": "https://github.com/envoyproxy/gateway",
-      "compatibility_matrix_url": "https://gateway.envoyproxy.io/docs/install/matrix/",
+      "compatibility_matrix_url": "https://gateway.envoyproxy.io/news/releases/matrix/",
       "changelog_location": "https://github.com/envoyproxy/gateway/releases"
     },
     {
@@ -2419,7 +2419,7 @@
       "name": "Gravitee.io",
       "project_url": "https://gravitee.io",
       "repository": "https://github.com/gravitee-io/gravitee-api-management",
-      "compatibility_matrix_url": "https://documentation.gravitee.io/apim/overview/plugins-and-api-definitions-support",
+      "compatibility_matrix_url": "https://documentation.gravitee.io/gravitee-kubernetes-operator-gko/overview/compatibility-and-limitations",
       "changelog_location": "https://github.com/gravitee-io/gravitee-api-management/releases"
     },
     {
@@ -2461,7 +2461,7 @@
       "name": "Kuadrant",
       "project_url": "https://kuadrant.io",
       "repository": "https://github.com/kuadrant/kuadrant-operator",
-      "compatibility_matrix_url": "https://docs.kuadrant.io/latest/kuadrant-operator/doc/install/",
+      "compatibility_matrix_url": "https://docs.kuadrant.io/1.0.x/kuadrant-operator/doc/install/install-kubernetes/",
       "changelog_location": "https://github.com/kuadrant/kuadrant-operator/releases"
     },
     {
@@ -2573,7 +2573,7 @@
       "name": "cdk8s",
       "project_url": "https://cdk8s.io/",
       "repository": "https://github.com/cdk8s-team/cdk8s",
-      "compatibility_matrix_url": "https://cdk8s.io/docs/latest/getting-started/",
+      "compatibility_matrix_url": "https://cdk8s.io/docs/latest/plus/",
       "changelog_location": "https://github.com/cdk8s-team/cdk8s/releases"
     },
     {
@@ -2699,7 +2699,7 @@
       "name": "Kratix",
       "project_url": "https://kratix.io/",
       "repository": "https://github.com/syntasso/kratix",
-      "compatibility_matrix_url": "https://kratix.io/docs/main/guides/installing-kratix",
+      "compatibility_matrix_url": "https://docs.kratix.io/main/guides/installing-kratix-others",
       "changelog_location": "https://github.com/syntasso/kratix/releases"
     },
     {
@@ -2825,7 +2825,7 @@
       "name": "Backend.AI",
       "project_url": "https://backend.ai/",
       "repository": "https://github.com/lablup/backend.ai",
-      "compatibility_matrix_url": "https://docs.backend.ai/en/latest/install/requirements.html",
+      "compatibility_matrix_url": "https://github.com/lablup/backend.ai",
       "changelog_location": "https://github.com/lablup/backend.ai/blob/main/CHANGELOG.md"
     },
     {
@@ -2846,7 +2846,7 @@
       "name": "Clusterpedia",
       "project_url": "https://clusterpedia.io",
       "repository": "https://github.com/clusterpedia-io/clusterpedia",
-      "compatibility_matrix_url": "https://clusterpedia.io/docs/getting-started/requirements/",
+      "compatibility_matrix_url": "https://github.com/clusterpedia-io/clusterpedia",
       "changelog_location": "https://github.com/clusterpedia-io/clusterpedia/releases"
     },
     {
@@ -2860,28 +2860,28 @@
       "name": "Crossplane",
       "project_url": "https://crossplane.io/",
       "repository": "https://github.com/crossplane/crossplane",
-      "compatibility_matrix_url": "https://docs.crossplane.io/latest/software/install/#supported-kubernetes-versions",
+      "compatibility_matrix_url": "https://docs.crossplane.io/latest/guides/upgrade-to-crossplane-v2/",
       "changelog_location": "https://github.com/crossplane/crossplane/releases"
     },
     {
       "name": "DolphinScheduler",
       "project_url": "https://dolphinscheduler.apache.org",
       "repository": "https://github.com/apache/dolphinscheduler",
-      "compatibility_matrix_url": "https://dolphinscheduler.apache.org/en-us/docs/latest/user_doc/guide/installation/kubernetes.html",
+      "compatibility_matrix_url": "https://github.com/apache/dolphinscheduler/blob/dev/docs/docs/en/guide/installation/kubernetes.md",
       "changelog_location": "https://github.com/apache/dolphinscheduler/releases"
     },
     {
       "name": "Eraser",
       "project_url": "https://eraser-dev.github.io/eraser/",
       "repository": "https://github.com/eraser-dev/eraser",
-      "compatibility_matrix_url": "https://eraser-dev.github.io/eraser/docs/installation/#prerequisites",
+      "compatibility_matrix_url": "https://eraser-dev.github.io/eraser/docs/installation",
       "changelog_location": "https://github.com/eraser-dev/eraser/releases"
     },
     {
       "name": "Fluid",
       "project_url": "https://fluid-cloudnative.github.io/",
       "repository": "https://github.com/fluid-cloudnative/fluid",
-      "compatibility_matrix_url": "https://github.com/fluid-cloudnative/fluid/blob/master/docs/en/userguide/prerequisites.md",
+      "compatibility_matrix_url": "https://fluid-cloudnative.github.io/docs/get-started/installation",
       "changelog_location": "https://github.com/fluid-cloudnative/fluid/releases"
     },
     {
@@ -2916,7 +2916,7 @@
       "name": "Kestra",
       "project_url": "https://kestra.io/",
       "repository": "https://github.com/kestra-io/kestra",
-      "compatibility_matrix_url": "https://kestra.io/docs/getting-started/installation",
+      "compatibility_matrix_url": "https://kestra.io/docs/installation/kubernetes",
       "changelog_location": "https://github.com/kestra-io/kestra/releases"
     },
     {
@@ -2930,7 +2930,7 @@
       "name": "Koordinator",
       "project_url": "https://koordinator.sh",
       "repository": "https://github.com/koordinator-sh/koordinator",
-      "compatibility_matrix_url": "https://koordinator.sh/docs/installation/#prerequisites",
+      "compatibility_matrix_url": "https://koordinator.sh/docs/installation",
       "changelog_location": "https://github.com/koordinator-sh/koordinator/releases"
     },
     {
@@ -2951,7 +2951,7 @@
       "name": "KubeSlice",
       "project_url": "https://kubeslice.io",
       "repository": "https://github.com/kubeslice/kubeslice",
-      "compatibility_matrix_url": "https://kubeslice.io/documentation/open-source/release-notes/prerequisites",
+      "compatibility_matrix_url": "https://kubeslice.io/documentation/open-source/1.4.0/get-started/prerequisites/prerequisites-worker-cluster-requirements/",
       "changelog_location": "https://github.com/kubeslice/kubeslice/releases"
     },
     {
@@ -2965,7 +2965,7 @@
       "name": "Kubeflow",
       "project_url": "https://kubeflow.org",
       "repository": "https://github.com/kubeflow/kubeflow",
-      "compatibility_matrix_url": "https://www.kubeflow.org/docs/releases/supported-versions/",
+      "compatibility_matrix_url": "https://www.kubeflow.org/docs/components/pipelines/reference/version-compatibility/",
       "changelog_location": "https://github.com/kubeflow/kubeflow/releases"
     },
     {
@@ -2993,7 +2993,7 @@
       "name": "Open Cluster Management",
       "project_url": "https://open-cluster-management.io/",
       "repository": "https://github.com/open-cluster-management-io/ocm",
-      "compatibility_matrix_url": "https://open-cluster-management.io/community/releases/",
+      "compatibility_matrix_url": "https://open-cluster-management.io/docs/release/",
       "changelog_location": "https://github.com/open-cluster-management-io/ocm/releases"
     },
     {
@@ -3007,7 +3007,7 @@
       "name": "OpenNebula",
       "project_url": "https://opennebula.io/",
       "repository": "https://github.com/OpenNebula/one",
-      "compatibility_matrix_url": "https://docs.opennebula.io/stable/intro_release_notes/release_notes/platform_notes.html",
+      "compatibility_matrix_url": "https://docs.opennebula.io/6.10/intro_release_notes/release_notes/platform_notes.html",
       "changelog_location": "https://github.com/OpenNebula/one/releases"
     },
     {
@@ -3133,14 +3133,14 @@
       "name": "Kmesh",
       "project_url": "https://kmesh.net",
       "repository": "https://github.com/kmesh-net/kmesh",
-      "compatibility_matrix_url": "https://kmesh.net/en/docs/setup/prerequisites/",
+      "compatibility_matrix_url": "https://kmesh.net/en/docs/setup/quick-start/",
       "changelog_location": "https://github.com/kmesh-net/kmesh/releases"
     },
     {
       "name": "Kuma",
       "project_url": "https://kuma.io",
       "repository": "https://github.com/kumahq/kuma",
-      "compatibility_matrix_url": "https://kuma.io/docs/latest/introduction/version-matrix/",
+      "compatibility_matrix_url": "https://docs.konghq.com/mesh/latest/introduction/kuma-requirements/",
       "changelog_location": "https://github.com/kumahq/kuma/blob/master/CHANGELOG.md"
     },
     {
@@ -3175,7 +3175,7 @@
       "name": "Sermant",
       "project_url": "https://sermant.io/",
       "repository": "https://github.com/sermant-io/Sermant",
-      "compatibility_matrix_url": "https://sermant.io/en/document/user-guide/version-compatibility.html",
+      "compatibility_matrix_url": "https://sermant.io/en/document/user-guide/sermant-xds.html",
       "changelog_location": "https://github.com/sermant-io/Sermant/releases"
     },
     {
@@ -3301,14 +3301,14 @@
       "name": "Pipy",
       "project_url": "https://flomesh.io/pipy/",
       "repository": "https://github.com/flomesh-io/pipy",
-      "compatibility_matrix_url": "https://flomesh.io/docs/",
+      "compatibility_matrix_url": "https://github.com/flomesh-io/fsm",
       "changelog_location": "https://github.com/flomesh-io/pipy/releases"
     },
     {
       "name": "STUNner",
       "project_url": "https://l7mp.io",
       "repository": "https://github.com/l7mp/stunner",
-      "compatibility_matrix_url": "https://github.com/l7mp/stunner/blob/main/README.md",
+      "compatibility_matrix_url": "https://docs.l7mp.io/en/stable/INSTALL/",
       "changelog_location": "https://github.com/l7mp/stunner/releases"
     },
     {
@@ -3329,7 +3329,7 @@
       "name": "Tengine",
       "project_url": "https://tengine.taobao.org/",
       "repository": "https://github.com/alibaba/tengine",
-      "compatibility_matrix_url": "https://tengine.taobao.org/documentation.html",
+      "compatibility_matrix_url": "https://github.com/alibaba/tengine-ingress",
       "changelog_location": "https://github.com/alibaba/tengine/blob/master/CHANGES"
     },
     {
@@ -3343,7 +3343,7 @@
       "name": "Score",
       "project_url": "https://score.dev/",
       "repository": "https://github.com/score-spec/spec",
-      "compatibility_matrix_url": "https://docs.score.dev/docs/get-started/",
+      "compatibility_matrix_url": "https://github.com/score-spec/score-k8s",
       "changelog_location": "https://github.com/score-spec/spec/releases"
     },
     {
@@ -3392,7 +3392,7 @@
       "name": "Vertical Pod Autoscaler",
       "project_url": "https://github.com/kubernetes/autoscaler/tree/master/vertical-pod-autoscaler",
       "repository": "https://github.com/kubernetes/autoscaler",
-      "compatibility_matrix_url": "https://github.com/kubernetes/autoscaler/tree/master/vertical-pod-autoscaler#prerequisites",
+      "compatibility_matrix_url": "https://github.com/kubernetes/autoscaler/blob/master/vertical-pod-autoscaler/docs/installation.md",
       "changelog_location": "https://github.com/kubernetes/autoscaler/releases"
     },
     {
@@ -3420,7 +3420,7 @@
       "name": "Backstage",
       "project_url": "https://backstage.io/",
       "repository": "https://github.com/backstage/backstage",
-      "compatibility_matrix_url": "https://backstage.io/docs/getting-started/",
+      "compatibility_matrix_url": "https://backstage.io/docs/features/kubernetes/",
       "changelog_location": "https://github.com/backstage/backstage/releases"
     },
     {
@@ -3497,14 +3497,14 @@
       "name": "Cedar",
       "project_url": "https://cedarpolicy.com",
       "repository": "https://github.com/cedar-policy/cedar",
-      "compatibility_matrix_url": "https://github.com/cedar-policy/cedar/blob/main/README.md",
+      "compatibility_matrix_url": "https://github.com/cedar-policy/cedar-access-control-for-k8s",
       "changelog_location": "https://github.com/cedar-policy/cedar/blob/main/CHANGELOG.md"
     },
     {
       "name": "Cerbos",
       "project_url": "https://www.cerbos.dev/",
       "repository": "https://github.com/cerbos/cerbos",
-      "compatibility_matrix_url": "https://docs.cerbos.dev/cerbos/latest/installation/",
+      "compatibility_matrix_url": "https://docs.cerbos.dev/cerbos/latest/installation/helm.html",
       "changelog_location": "https://github.com/cerbos/cerbos/releases"
     },
     {
@@ -3546,7 +3546,7 @@
       "name": "ContainerSSH",
       "project_url": "https://containerssh.io",
       "repository": "https://github.com/containerssh/containerssh",
-      "compatibility_matrix_url": "https://containerssh.io/reference/installation/",
+      "compatibility_matrix_url": "https://containerssh.io/v0.5/reference/kubernetes/",
       "changelog_location": "https://github.com/containerssh/containerssh/releases"
     },
     {
@@ -3560,14 +3560,14 @@
       "name": "Dex",
       "project_url": "https://dexidp.io/",
       "repository": "https://github.com/dexidp/dex",
-      "compatibility_matrix_url": "https://dexidp.io/docs/getting-started/",
+      "compatibility_matrix_url": "https://dexidp.io/docs/guides/kubernetes/",
       "changelog_location": "https://github.com/dexidp/dex/releases"
     },
     {
       "name": "EJBCA Community",
       "project_url": "https://www.ejbca.org/",
       "repository": "https://github.com/Keyfactor/ejbca-ce",
-      "compatibility_matrix_url": "https://doc.primekey.com/ejbca/ejbca-release-information/ejbca-platform-support-matrix",
+      "compatibility_matrix_url": "https://docs.keyfactor.com/container/latest/ejbca/get-started-with-ejbca-using-kubernetes-and-helm",
       "changelog_location": "https://github.com/Keyfactor/ejbca-ce/releases"
     },
     {
@@ -3588,7 +3588,7 @@
       "name": "Goldilocks",
       "project_url": "https://www.fairwinds.com/open-source-software",
       "repository": "https://github.com/FairwindsOps/goldilocks",
-      "compatibility_matrix_url": "https://github.com/FairwindsOps/goldilocks/blob/master/README.md",
+      "compatibility_matrix_url": "https://goldilocks.docs.fairwinds.com/installation/",
       "changelog_location": "https://github.com/FairwindsOps/goldilocks/releases"
     },
     {
@@ -3623,7 +3623,7 @@
       "name": "Keylime",
       "project_url": "https://keylime.dev/",
       "repository": "https://github.com/keylime/keylime",
-      "compatibility_matrix_url": "https://keylime.readthedocs.io/en/latest/installation.html",
+      "compatibility_matrix_url": "https://github.com/keylime/attestation-operator",
       "changelog_location": "https://github.com/keylime/keylime/releases"
     },
     {
@@ -3707,7 +3707,7 @@
       "name": "Open Policy Administration Layer (OPAL)",
       "project_url": "https://www.opal.ac",
       "repository": "https://github.com/permitio/opal",
-      "compatibility_matrix_url": "https://github.com/permitio/opal#readme",
+      "compatibility_matrix_url": "https://docs.opal.ac/tutorials/helm-chart-for-kubernetes/",
       "changelog_location": "https://github.com/permitio/opal/releases"
     },
     {
@@ -3763,7 +3763,7 @@
       "name": "Permify",
       "project_url": "https://permify.co",
       "repository": "https://github.com/Permify/permify",
-      "compatibility_matrix_url": "https://docs.permify.co/docs/installation/kubernetes",
+      "compatibility_matrix_url": "https://docs.permify.co/setting-up/installation/kubernetes",
       "changelog_location": "https://github.com/Permify/permify/releases"
     },
     {
@@ -3777,7 +3777,7 @@
       "name": "Polaris",
       "project_url": "https://fairwinds.com/polaris",
       "repository": "https://github.com/FairwindsOps/polaris",
-      "compatibility_matrix_url": "https://polaris.docs.fairwinds.com/infrastructure-as-code/#install-the-cli",
+      "compatibility_matrix_url": "https://github.com/FairwindsOps/polaris/blob/master/README.md",
       "changelog_location": "https://github.com/FairwindsOps/polaris/releases"
     },
     {
@@ -3847,7 +3847,7 @@
       "name": "Sonobuoy",
       "project_url": "https://sonobuoy.io",
       "repository": "https://github.com/vmware-tanzu/sonobuoy",
-      "compatibility_matrix_url": "https://sonobuoy.io/docs/main/matrix/",
+      "compatibility_matrix_url": "https://github.com/vmware-tanzu/sonobuoy#readme",
       "changelog_location": "https://github.com/vmware-tanzu/sonobuoy/releases"
     },
     {
@@ -3861,7 +3861,7 @@
       "name": "Teleport",
       "project_url": "https://goteleport.com",
       "repository": "https://github.com/gravitational/teleport",
-      "compatibility_matrix_url": "https://goteleport.com/docs/reference/compatibility/",
+      "compatibility_matrix_url": "https://goteleport.com/docs/reference/helm-reference/",
       "changelog_location": "https://github.com/gravitational/teleport/blob/master/CHANGELOG.md"
     },
     {
@@ -3896,7 +3896,7 @@
       "name": "ThreatMapper",
       "project_url": "https://deepfence.io/threatmapper/",
       "repository": "https://github.com/deepfence/ThreatMapper",
-      "compatibility_matrix_url": "https://community.deepfence.io/threatmapper/docs/v2/kubernetes/",
+      "compatibility_matrix_url": "https://github.com/deepfence/ThreatMapper/blob/master/README.md",
       "changelog_location": "https://github.com/deepfence/ThreatMapper/releases"
     },
     {
@@ -3945,14 +3945,14 @@
       "name": "authentik",
       "project_url": "https://goauthentik.io/",
       "repository": "https://github.com/goauthentik/authentik",
-      "compatibility_matrix_url": "https://docs.goauthentik.io/docs/installation/kubernetes",
+      "compatibility_matrix_url": "https://docs.goauthentik.io/docs/install-config/install/kubernetes",
       "changelog_location": "https://github.com/goauthentik/authentik/releases"
     },
     {
       "name": "bpfman",
       "project_url": "https://bpfman.io/",
       "repository": "https://github.com/bpfman/bpfman",
-      "compatibility_matrix_url": "https://bpfman.io/docs/getting-started/kubernetes-deployment/",
+      "compatibility_matrix_url": "https://bpfman.io/main/getting-started/example-bpf-k8s/",
       "changelog_location": "https://github.com/bpfman/bpfman/releases"
     },
     {
@@ -4001,7 +4001,7 @@
       "name": "sigstore",
       "project_url": "https://www.sigstore.dev/",
       "repository": "https://github.com/sigstore/sigstore",
-      "compatibility_matrix_url": "https://docs.sigstore.dev/system_config/installation/",
+      "compatibility_matrix_url": "https://github.com/sigstore/scaffolding/blob/main/README.md",
       "changelog_location": "https://github.com/sigstore/sigstore/releases"
     },
     {
@@ -4022,7 +4022,7 @@
       "name": "Antrea",
       "project_url": "https://antrea.io/",
       "repository": "https://github.com/antrea-io/antrea",
-      "compatibility_matrix_url": "https://antrea.io/docs/main/versioning/",
+      "compatibility_matrix_url": "https://github.com/antrea-io/antrea/blob/main/docs/versioning.md",
       "changelog_location": "https://github.com/antrea-io/antrea/releases"
     },
     {
@@ -4050,7 +4050,7 @@
       "name": "FabEdge",
       "project_url": "https://github.com/FabEdge/",
       "repository": "https://github.com/FabEdge/fabedge",
-      "compatibility_matrix_url": "https://github.com/FabEdge/fabedge/blob/main/docs/install.md",
+      "compatibility_matrix_url": "https://github.com/FabEdge/fabedge/blob/main/README.md",
       "changelog_location": "https://github.com/FabEdge/fabedge/releases"
     },
     {
@@ -4085,7 +4085,7 @@
       "name": "Ligato",
       "project_url": "https://ligato.io/",
       "repository": "https://github.com/ligato/vpp-agent",
-      "compatibility_matrix_url": "https://docs.ligato.io/en/latest/user-guide/get-vpp-agent/",
+      "compatibility_matrix_url": "https://github.com/ligato/vpp-agent/blob/master/README.md",
       "changelog_location": "https://github.com/ligato/vpp-agent/blob/master/CHANGELOG.md"
     },
     {
@@ -4099,7 +4099,7 @@
       "name": "Network Service Mesh",
       "project_url": "https://networkservicemesh.io/",
       "repository": "https://github.com/networkservicemesh/api",
-      "compatibility_matrix_url": "https://networkservicemesh.io/docs/concepts/features/",
+      "compatibility_matrix_url": "https://github.com/networkservicemesh/deployments-k8s/blob/main/README.md",
       "changelog_location": "https://github.com/networkservicemesh/deployments-k8s/releases"
     },
     {
@@ -4134,14 +4134,14 @@
       "name": "Spiderpool",
       "project_url": "https://spidernet-io.github.io/spiderpool/",
       "repository": "https://github.com/spidernet-io/spiderpool",
-      "compatibility_matrix_url": "https://spidernet-io.github.io/spiderpool/usage/install/",
+      "compatibility_matrix_url": "https://spidernet-io.github.io/spiderpool/v0.9/usage/install/system-requirements/",
       "changelog_location": "https://github.com/spidernet-io/spiderpool/releases"
     },
     {
       "name": "Submariner",
       "project_url": "https://submariner.io",
       "repository": "https://github.com/submariner-io/submariner",
-      "compatibility_matrix_url": "https://submariner.io/getting-started/architecture/prerequisites/",
+      "compatibility_matrix_url": "https://submariner.io/getting-started/",
       "changelog_location": "https://github.com/submariner-io/submariner/releases"
     },
     {
@@ -4155,14 +4155,14 @@
       "name": "Alluxio",
       "project_url": "https://www.alluxio.io/",
       "repository": "https://github.com/alluxio/alluxio",
-      "compatibility_matrix_url": "https://docs.alluxio.io/kubernetes/user/stable/en/Overview.html",
+      "compatibility_matrix_url": "https://github.com/Alluxio/k8s-operator/blob/main/README.md",
       "changelog_location": "https://github.com/alluxio/alluxio/releases"
     },
     {
       "name": "Carina",
       "project_url": "https://carina-io.github.io/",
       "repository": "https://github.com/carina-io/carina",
-      "compatibility_matrix_url": "https://github.com/carina-io/carina/blob/main/docs/manual/installation.md",
+      "compatibility_matrix_url": "https://github.com/carina-io/carina/blob/main/README.md",
       "changelog_location": "https://github.com/carina-io/carina/releases"
     },
     {
@@ -4176,7 +4176,7 @@
       "name": "Container Storage Interface (CSI)",
       "project_url": "https://github.com/container-storage-interface",
       "repository": "https://github.com/container-storage-interface/spec",
-      "compatibility_matrix_url": "https://kubernetes-csi.github.io/docs/#kubernetes-releases",
+      "compatibility_matrix_url": "https://kubernetes-csi.github.io/docs/kubernetes-changelog.html",
       "changelog_location": "https://github.com/container-storage-interface/spec/blob/master/CHANGELOG.md"
     },
     {
@@ -4190,7 +4190,7 @@
       "name": "Curve",
       "project_url": "https://www.opencurve.io/",
       "repository": "https://github.com/opencurve/curve",
-      "compatibility_matrix_url": "https://github.com/opencurve/curve/blob/master/docs/cn/deploy.md",
+      "compatibility_matrix_url": "https://github.com/opencurve/curve/blob/master/README.md",
       "changelog_location": "https://github.com/opencurve/curve/releases"
     },
     {
@@ -4204,14 +4204,14 @@
       "name": "Gluster",
       "project_url": "https://www.gluster.org/",
       "repository": "https://github.com/gluster/glusterfs",
-      "compatibility_matrix_url": "https://docs.gluster.org/en/latest/Install-Guide/Overview/",
+      "compatibility_matrix_url": "https://github.com/gluster/gluster-kubernetes/blob/master/README.md",
       "changelog_location": "https://github.com/gluster/glusterfs/releases"
     },
     {
       "name": "HwameiStor",
       "project_url": "https://hwameistor.io/",
       "repository": "https://github.com/hwameistor/hwameistor",
-      "compatibility_matrix_url": "https://hwameistor.io/docs/intro/install",
+      "compatibility_matrix_url": "https://github.com/hwameistor/hwameistor/blob/main/README.md",
       "changelog_location": "https://github.com/hwameistor/hwameistor/releases"
     },
     {
@@ -4225,7 +4225,7 @@
       "name": "K8up",
       "project_url": "https://www.k8up.io/",
       "repository": "https://github.com/k8up-io/k8up",
-      "compatibility_matrix_url": "https://k8up.io/k8up/references/operator-config-reference.html",
+      "compatibility_matrix_url": "https://docs.k8up.io/k8up/2.12/explanations/system-requirements.html",
       "changelog_location": "https://github.com/k8up-io/k8up/releases"
     },
     {
@@ -4260,7 +4260,7 @@
       "name": "MooseFS",
       "project_url": "https://moosefs.com/",
       "repository": "https://github.com/moosefs/moosefs",
-      "compatibility_matrix_url": "https://moosefs.com/documentation/",
+      "compatibility_matrix_url": "https://github.com/moosefs/moosefs-csi",
       "changelog_location": "https://github.com/moosefs/moosefs/releases"
     },
     {
@@ -4288,7 +4288,7 @@
       "name": "Piraeus Datastore",
       "project_url": "https://piraeus.io/",
       "repository": "https://github.com/piraeusdatastore/piraeus-operator",
-      "compatibility_matrix_url": "https://github.com/piraeusdatastore/piraeus-operator/blob/v2/docs/README.md",
+      "compatibility_matrix_url": "https://piraeus.io/docs/stable/tutorial/get-started/",
       "changelog_location": "https://github.com/piraeusdatastore/piraeus-operator/releases"
     },
     {
@@ -4337,14 +4337,14 @@
       "name": "Vineyard",
       "project_url": "https://v6d.io",
       "repository": "https://github.com/v6d-io/v6d",
-      "compatibility_matrix_url": "https://v6d.io/notes/getting-started.html#prerequisites",
+      "compatibility_matrix_url": "https://v6d.io/notes/cloud-native/vineyard-operator.html",
       "changelog_location": "https://github.com/v6d-io/v6d/releases"
     },
     {
       "name": "Zenko",
       "project_url": "https://www.zenko.io",
       "repository": "https://github.com/scality/zenko",
-      "compatibility_matrix_url": "https://zenko.io/docs/installation/prerequisites/",
+      "compatibility_matrix_url": "https://zenko.readthedocs.io/en/latest/operation/Architecture/Kubernetes.html",
       "changelog_location": "https://github.com/scality/zenko/releases"
     },
     {
@@ -4393,7 +4393,7 @@
       "name": "Anchore Engine",
       "project_url": "https://anchore.com/",
       "repository": "https://github.com/anchore/anchore-engine",
-      "compatibility_matrix_url": "https://docs.anchore.com/current/docs/deployment/kubernetes/",
+      "compatibility_matrix_url": "https://docs.anchore.com/current/docs/deployment/requirements/",
       "changelog_location": "https://github.com/anchore/anchore-engine/releases"
     },
     {
@@ -4575,7 +4575,7 @@
       "name": "Nuclio",
       "project_url": "https://nuclio.io/",
       "repository": "https://github.com/nuclio/nuclio",
-      "compatibility_matrix_url": "https://nuclio.io/docs/latest/setup/k8s/getting-started-k8s/",
+      "compatibility_matrix_url": "https://docs.nuclio.io/en/stable/setup/k8s/getting-started-k8s.html",
       "changelog_location": "https://github.com/nuclio/nuclio/releases"
     },
     {
