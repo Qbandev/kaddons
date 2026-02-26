@@ -264,16 +264,6 @@ type singleAddonAnalysisInput struct {
 
 func analyzeSingleAddon(ctx context.Context, client *genai.Client, model, k8sVersion string, addonInfo addonWithInfo) (output.AddonCompatibility, error) {
 	prunedCompatibilityEvidence := pruneEvidenceText(addonInfo.CompatibilityContent, 7000, 60)
-	fmt.Fprintf(
-		os.Stderr,
-		"Evidence for %s: lines=%d chars=%d has_k8s=%t has_versions=%t fetch_error=%t\n",
-		addonInfo.Name,
-		countNonEmptyLines(prunedCompatibilityEvidence),
-		len(prunedCompatibilityEvidence),
-		evidenceK8sPattern.MatchString(prunedCompatibilityEvidence),
-		evidenceVersionPattern.MatchString(prunedCompatibilityEvidence),
-		addonInfo.FetchError != "",
-	)
 	eolSummary := make([]string, 0, len(addonInfo.EOLData))
 	for index, cycle := range addonInfo.EOLData {
 		if index >= 6 {
@@ -526,20 +516,6 @@ func pruneEvidenceText(input string, maxChars int, maxLines int) string {
 		builder.WriteString(line)
 	}
 	return strings.TrimSpace(builder.String())
-}
-
-func countNonEmptyLines(text string) int {
-	trimmed := strings.TrimSpace(text)
-	if trimmed == "" {
-		return 0
-	}
-	count := 0
-	for _, line := range strings.Split(trimmed, "\n") {
-		if strings.TrimSpace(line) != "" {
-			count++
-		}
-	}
-	return count
 }
 
 func truncateToValidUTF8Prefix(text string, maxBytes int) string {
