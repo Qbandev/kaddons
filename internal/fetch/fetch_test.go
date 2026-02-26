@@ -1,6 +1,9 @@
 package fetch
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestGitHubRawURL(t *testing.T) {
 	tests := []struct {
@@ -119,5 +122,28 @@ func TestParseEOLProducts_InvalidJSON(t *testing.T) {
 	_, err := parseEOLProducts([]byte(`{"result":[`))
 	if err == nil {
 		t.Fatal("parseEOLProducts() expected error for invalid JSON")
+	}
+}
+
+func TestNormalizeFetchedContent_PreservesTableLikeLines(t *testing.T) {
+	html := `
+<html><body>
+  <h2>Tested versions</h2>
+  <table>
+    <tr><th>Argo CD version</th><th>Kubernetes versions</th></tr>
+    <tr><td>3.3</td><td>v1.34, v1.33, v1.32, v1.31</td></tr>
+  </table>
+</body></html>`
+
+	got := normalizeFetchedContent(html, false)
+
+	if !strings.Contains(got, "Tested versions") {
+		t.Fatalf("normalizeFetchedContent() missing heading: %q", got)
+	}
+	if !strings.Contains(got, "Argo CD version") || !strings.Contains(got, "Kubernetes versions") {
+		t.Fatalf("normalizeFetchedContent() missing table headers: %q", got)
+	}
+	if !strings.Contains(got, "v1.31") {
+		t.Fatalf("normalizeFetchedContent() missing table cell content: %q", got)
 	}
 }

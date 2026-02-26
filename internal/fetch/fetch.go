@@ -16,7 +16,9 @@ import (
 )
 
 var htmlTagRe = regexp.MustCompile(`<[^>]*>`)
-var whitespaceRe = regexp.MustCompile(`\s+`)
+var blockTagRe = regexp.MustCompile(`(?i)</?(?:p|div|li|tr|td|th|h[1-6]|br|table|section|article|ul|ol)[^>]*>`)
+var horizontalWhitespaceRe = regexp.MustCompile(`[ \t\r\f\v]+`)
+var blankLineRe = regexp.MustCompile(`\n{2,}`)
 
 // GitHubRawURL converts a GitHub URL to its raw.githubusercontent.com equivalent
 // so that Markdown content is fetched directly instead of rendered HTML.
@@ -122,16 +124,7 @@ func CompatibilityPageWithClient(ctx context.Context, client *http.Client, pageU
 		return "", fmt.Errorf("reading response body: %w", err)
 	}
 
-	text := string(body)
-	if !isRaw {
-		text = htmlTagRe.ReplaceAllString(text, " ")
-		text = whitespaceRe.ReplaceAllString(text, " ")
-	}
-
-	if len(text) > 30000 {
-		text = text[:30000]
-	}
-
+	text := normalizeFetchedContent(string(body), isRaw)
 	return text, nil
 }
 
@@ -210,6 +203,25 @@ func parseEOLProducts(body []byte) ([]addon.EOLProductCatalogEntry, error) {
 		return nil, fmt.Errorf("parsing EOL product catalog: %w", err)
 	}
 	return parsed.Result, nil
+}
+
+func normalizeFetchedContent(rawText string, isRaw bool) string {
+	text := rawText
+	if !isRaw {
+		// Preserve block boundaries as newlines so version matrices/tables remain extractable.
+		text = blockTagRe.ReplaceAllString(text, "\n")
+		text = htmlTagRe.ReplaceAllString(text, " ")
+		text = horizontalWhitespaceRe.ReplaceAllString(text, " ")
+		text = blankLineRe.ReplaceAllString(text, "\n")
+		text = strings.TrimSpace(text)
+	}
+
+	// Keep a larger deterministic fetch budget because downstream pruning enforces
+	// strict per-addon bounds before sending data to Gemini.
+	if len(text) > 120000 {
+		text = text[:120000]
+	}
+	return text
 }
 
 func doRequestWithRetry(ctx context.Context, client *http.Client, request *http.Request) (*http.Response, error) {
