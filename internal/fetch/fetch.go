@@ -109,7 +109,7 @@ func CompatibilityPageWithClient(ctx context.Context, client *http.Client, pageU
 	if err != nil {
 		return "", fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
 		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
@@ -147,7 +147,7 @@ func EOLData(ctx context.Context, product string) ([]addon.EOLCycle, error) {
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status %d", resp.StatusCode)
