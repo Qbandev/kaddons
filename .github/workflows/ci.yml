@@ -15,6 +15,13 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOLANGCI_LINT_VERSION: v2.10.1
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -28,7 +35,7 @@ jobs:
         run: go vet ./...
       - name: Lint
         run: |
-          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
           golangci-lint run
       - name: Test
         run: go test ./... -race -v
@@ -69,3 +76,41 @@ jobs:
         run: go install github.com/securego/gosec/v2/cmd/gosec@v2.23.0
       - name: Gosec
         run: gosec ./...
+
+  install-from-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        with:
+          go-version: '1.25.7'
+          cache: true
+      - name: Build from source
+        run: make build
+      - name: Verify built binary
+        run: ./kaddons --version
+
+  install-via-go:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        with:
+          go-version: '1.25.7'
+          cache: true
+      - name: Install from module
+        run: go install github.com/qbandev/kaddons/cmd/kaddons@${{ github.sha }}
+      - name: Verify go-installed binary
+        run: |
+          "$(go env GOPATH)/bin/kaddons" --version
+
+  install-via-homebrew-tap:
+    if: github.event_name == 'push'
+    runs-on: macos-latest
+    steps:
+      - name: Tap and install formula
+        run: |
+          brew tap qbandev/tap
+          brew install qbandev/tap/kaddons
+      - name: Verify Homebrew-installed binary
+        run: kaddons --version

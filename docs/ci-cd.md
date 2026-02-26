@@ -8,12 +8,12 @@ kaddons uses GitHub Actions for continuous integration, security scanning, autom
 
 Runs on every push to `main` and every pull request targeting `main`.
 
-**Test job:**
+**Test and quality jobs:**
 
 | Step | Command | Purpose |
 |------|---------|---------|
 | Vet | `go vet ./...` | Static analysis for common mistakes |
-| Lint | `golangci-lint` (latest) | Code style and quality enforcement |
+| Lint | `golangci-lint` (pinned version) | Code style and quality enforcement |
 | Test | `go test ./... -race -v` | Unit tests with race detector |
 | Tidy check (advisory) | `go mod tidy` + diff | Reports module tidy differences observed in CI environment |
 
@@ -30,6 +30,32 @@ Runs on every push to `main` and every pull request targeting `main`.
 | govulncheck | `govulncheck ./...` | Known vulnerability scanning in dependencies |
 | gosec | `gosec ./...` | Static security analysis |
 
+**Installation verification jobs:**
+
+| Job | Check | Purpose |
+|-----|-------|---------|
+| Source install | `make build` + `./kaddons --version` | Ensures build-from-source installation works |
+| Go install | `go install ...@${GITHUB_SHA}` + version check | Ensures module installation works |
+| Homebrew tap install | `brew tap qbandev/tap` + `brew install qbandev/tap/kaddons` | Ensures Homebrew installation path works |
+
+### Supply chain security (`supply-chain.yml`)
+
+Runs on pull requests and pushes to `main`.
+
+1. **Tirith scan** — repository security scan for hidden/injection-style content using `tirith scan --ci --fail-on high`
+
+### Dependency review (`dependency-review.yml`)
+
+Runs on pull requests to `main` and blocks risky dependency introductions using GitHub's dependency review action.
+
+### Code scanning (`codeql.yml`)
+
+Runs CodeQL analysis on pull requests, pushes to `main`, and weekly schedule to catch code-level security issues.
+
+### Scorecards (`scorecards.yml`)
+
+Runs OpenSSF Scorecards checks on pushes, weekly schedule, and manual trigger, and publishes SARIF results.
+
 ### Weekly link check (`linkcheck.yml`)
 
 Runs every Monday at 08:00 UTC (also manually triggerable).
@@ -40,12 +66,19 @@ Runs every Monday at 08:00 UTC (also manually triggerable).
 
 This catches URL rot in the addon database — projects move, rename repositories, or restructure documentation.
 
-### Release (`release.yml`)
+### Release automation (`release-please.yml`)
 
-Triggered by pushing a tag matching `v*` (e.g., `v1.2.0`).
+Triggered on each push to `main` (including merged PRs).
 
-1. Runs the full test suite (must pass before release)
-2. Runs [GoReleaser](https://goreleaser.com) to build, package, and publish
+1. Uses [release-please](https://github.com/googleapis/release-please-action) to determine semantic version bumps from commit history
+2. Creates new version tags automatically when a releasable change is detected
+
+### Publish release artifacts (`release.yml`)
+
+Triggered by tags matching `v*` (created by release-please automation).
+
+1. Runs the full test suite (must pass before publish)
+2. Runs [GoReleaser](https://goreleaser.com) to build, package, publish GitHub assets, and update Homebrew tap
 
 ## Release process
 
@@ -77,12 +110,15 @@ Archive naming: `kaddons_{version}_{os}_{arch}.tar.gz`
 
 ### Creating a release
 
-```bash
-git tag v1.2.0
-git push origin v1.2.0
-```
+Merge pull requests into `main`. The release workflow will:
 
-The release workflow handles everything after the tag push. The Homebrew formula is automatically updated.
+1. infer the next version from commits
+2. create the version tag automatically
+3. publish release artifacts and Homebrew formula updates
+
+Manual tag pushes (`git tag vX.Y.Z && git push origin vX.Y.Z`) are still supported as a fallback.
+
+`HOMEBREW_TAP_TOKEN` is required because Homebrew publishing writes formula updates to the external `qbandev/homebrew-tap` repository.
 
 ### Changelog
 
@@ -105,6 +141,7 @@ golangci-lint run
 # Security
 govulncheck ./...
 gosec ./...
+tirith scan . --ci --fail-on high
 
 # Validate addon DB (no cluster needed)
 make validate                              # both checks

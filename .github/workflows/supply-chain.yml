@@ -1,0 +1,31 @@
+name: Supply Chain Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supply-chain-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tirith-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install Tirith
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSLO "https://github.com/sheeki03/tirith/releases/download/v0.2.2/tirith-x86_64-unknown-linux-gnu.tar.gz"
+          echo "f80841b6c88c8b6b84469602d00e06b2d54395366626f67b4e32a7a307a3311a  tirith-x86_64-unknown-linux-gnu.tar.gz" | sha256sum -c -
+          tar -xzf "tirith-x86_64-unknown-linux-gnu.tar.gz" tirith
+          install -m 0755 tirith "$HOME/.local/bin/tirith"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Scan repository with Tirith
+        run: tirith scan . --ci --fail-on high
