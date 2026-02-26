@@ -13,6 +13,7 @@ import (
 
 	"github.com/qbandev/kaddons/internal/addon"
 	"github.com/qbandev/kaddons/internal/fetch"
+	"github.com/qbandev/kaddons/internal/resilience"
 )
 
 // ErrValidationFailed is returned when one or more validation checks fail.
@@ -186,7 +187,7 @@ func checkURL(ctx context.Context, client *http.Client, rawURL string) string {
 	}
 	req.Header.Set("User-Agent", "kaddons-validate/1.0")
 
-	resp, err := client.Do(req) // #nosec G704 -- rawURL is pre-validated by ValidatePublicHTTPSURL
+	resp, err := doRequestWithRetry(ctx, client, req)
 	if err != nil {
 		return fmt.Sprintf("error: %v", err)
 	}
@@ -201,7 +202,7 @@ func checkURL(ctx context.Context, client *http.Client, rawURL string) string {
 		}
 		getReq.Header.Set("User-Agent", "kaddons-validate/1.0")
 
-		resp2, err := client.Do(getReq) // #nosec G704 -- rawURL is pre-validated by ValidatePublicHTTPSURL
+		resp2, err := doRequestWithRetry(ctx, client, getReq)
 		if err != nil {
 			return fmt.Sprintf("error: %v", err)
 		}
@@ -222,6 +223,16 @@ func checkURL(ctx context.Context, client *http.Client, rawURL string) string {
 		return fmt.Sprintf("HTTP %d", resp.StatusCode)
 	}
 	return "ok"
+}
+
+func doRequestWithRetry(ctx context.Context, client *http.Client, request *http.Request) (*http.Response, error) {
+	policy := resilience.RetryPolicy{
+		Attempts:     3,
+		InitialDelay: 500 * time.Millisecond,
+		MaxDelay:     time.Second,
+		Multiplier:   2,
+	}
+	return resilience.DoHTTPRequestWithRetry(ctx, client, request, policy)
 }
 
 // hasK8sMatrix checks whether page content contains K8s version compatibility data.

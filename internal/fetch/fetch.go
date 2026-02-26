@@ -10,12 +10,16 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/qbandev/kaddons/internal/addon"
+	"github.com/qbandev/kaddons/internal/resilience"
 )
 
 var htmlTagRe = regexp.MustCompile(`<[^>]*>`)
-var whitespaceRe = regexp.MustCompile(`\s+`)
+var blockTagRe = regexp.MustCompile(`(?i)</?(?:p|div|li|tr|td|th|h[1-6]|br|table|section|article|ul|ol)[^>]*>`)
+var horizontalWhitespaceRe = regexp.MustCompile(`[ \t\r\f\v]+`)
+var blankLineRe = regexp.MustCompile(`\n{2,}`)
 
 // GitHubRawURL converts a GitHub URL to its raw.githubusercontent.com equivalent
 // so that Markdown content is fetched directly instead of rendered HTML.
@@ -104,8 +108,9 @@ func CompatibilityPageWithClient(ctx context.Context, client *http.Client, pageU
 	if err != nil {
 		return "", fmt.Errorf("creating request: %w", err)
 	}
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8")
 
-	resp, err := client.Do(req) // #nosec G704 -- URL is pre-validated by ValidatePublicHTTPSURL
+	resp, err := doRequestWithRetry(ctx, client, req)
 	if err != nil {
 		return "", fmt.Errorf("HTTP request failed: %w", err)
 	}
@@ -120,16 +125,7 @@ func CompatibilityPageWithClient(ctx context.Context, client *http.Client, pageU
 		return "", fmt.Errorf("reading response body: %w", err)
 	}
 
-	text := string(body)
-	if !isRaw {
-		text = htmlTagRe.ReplaceAllString(text, " ")
-		text = whitespaceRe.ReplaceAllString(text, " ")
-	}
-
-	if len(text) > 30000 {
-		text = text[:30000]
-	}
-
+	text := normalizeFetchedContent(string(body), isRaw)
 	return text, nil
 }
 
@@ -142,8 +138,7 @@ func EOLData(ctx context.Context, product string) ([]addon.EOLCycle, error) {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
-
-	resp, err := client.Do(req) // #nosec G704 -- endoflife.date API URL is fixed and not user-controlled
+	resp, err := doRequestWithRetry(ctx, client, req)
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
@@ -164,4 +159,95 @@ func EOLData(ctx context.Context, product string) ([]addon.EOLCycle, error) {
 	}
 
 	return cycles, nil
+}
+
+type eolProductsResponse struct {
+	Result []addon.EOLProductCatalogEntry `json:"result"`
+}
+
+// EOLProducts fetches the endoflife.date v1 product catalog for runtime slug resolution.
+func EOLProducts(ctx context.Context) ([]addon.EOLProductCatalogEntry, error) {
+	client := &http.Client{Timeout: 10 * time.Second}
+	const catalogURL = "https://endoflife.date/api/v1/products"
+
+	req, err := http.NewRequestWithContext(ctx, "GET", catalogURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := doRequestWithRetry(ctx, client, req)
+	if err != nil {
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	if err != nil {
+		return nil, fmt.Errorf("reading response body: %w", err)
+	}
+
+	products, err := parseEOLProducts(body)
+	if err != nil {
+		return nil, err
+	}
+
+	return products, nil
+}
+
+func parseEOLProducts(body []byte) ([]addon.EOLProductCatalogEntry, error) {
+	var parsed eolProductsResponse
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return nil, fmt.Errorf("parsing EOL product catalog: %w", err)
+	}
+	return parsed.Result, nil
+}
+
+func normalizeFetchedContent(rawText string, isRaw bool) string {
+	text := rawText
+	if !isRaw {
+		// Preserve block boundaries as newlines so version matrices/tables remain extractable.
+		text = blockTagRe.ReplaceAllString(text, "\n")
+		text = htmlTagRe.ReplaceAllString(text, " ")
+		text = horizontalWhitespaceRe.ReplaceAllString(text, " ")
+		text = blankLineRe.ReplaceAllString(text, "\n")
+		text = strings.TrimSpace(text)
+	}
+
+	// Keep a larger deterministic fetch budget because downstream pruning enforces
+	// strict per-addon bounds before sending data to Gemini.
+	if len(text) > 120000 {
+		text = truncateToValidUTF8Prefix(text, 120000)
+	}
+	return text
+}
+
+func truncateToValidUTF8Prefix(text string, maxBytes int) string {
+	if maxBytes <= 0 || text == "" {
+		return ""
+	}
+	if len(text) <= maxBytes {
+		return text
+	}
+	truncateIndex := maxBytes
+	for truncateIndex > 0 && !utf8.ValidString(text[:truncateIndex]) {
+		truncateIndex--
+	}
+	if truncateIndex <= 0 {
+		return ""
+	}
+	return text[:truncateIndex]
+}
+
+func doRequestWithRetry(ctx context.Context, client *http.Client, request *http.Request) (*http.Response, error) {
+	policy := resilience.RetryPolicy{
+		Attempts:     3,
+		InitialDelay: 500 * time.Millisecond,
+		MaxDelay:     time.Second,
+		Multiplier:   2,
+	}
+	return resilience.DoHTTPRequestWithRetry(ctx, client, request, policy)
 }

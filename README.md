@@ -11,7 +11,7 @@ kaddons uses a three-phase **Plan-and-Execute** pipeline. Phases 1 and 2 are ful
 ```
 Phase 1: Discovery        kubectl → detect K8s version + installed workloads
 Phase 2: Enrichment       Match against 668-addon DB, fetch compat pages + EOL data
-Phase 3: Analysis         Single Gemini call → compatibility verdicts
+Phase 3: Analysis         Linear per-addon Gemini calls → compatibility verdicts
 ```
 
 See [docs/architecture.md](docs/architecture.md) for the full data flow.
@@ -52,17 +52,17 @@ export GEMINI_API_KEY=your-key-here
 # Scan all addons (JSON output)
 kaddons
 
-# Table output
-kaddons -o table
+# HTML report output
+kaddons -o html --output-path ./kaddons-report.html
 
 # Check specific addons
-kaddons -a cert-manager,karpenter -o table
+kaddons -a cert-manager,karpenter -o html
 
 # Override cluster version
 kaddons -c 1.30
 
 # Filter by namespace
-kaddons -n kube-system -o table
+kaddons -n kube-system -o html
 ```
 
 ## Flags
@@ -74,7 +74,8 @@ kaddons -n kube-system -o table
 | `--addons` | `-a` | `""` (all matched) | Comma-separated addon name filter |
 | `--key` | `-k` | `""` (falls back to `GEMINI_API_KEY`) | Gemini API key |
 | `--model` | `-m` | `gemini-3-flash-preview` | Gemini model |
-| `--output` | `-o` | `json` | Output format: `json` or `table` |
+| `--output` | `-o` | `json` | Output format: `json` or `html` |
+| `--output-path` | | `./kaddons-report.html` | Output file path when `--output html` is selected |
 
 ## Output
 
@@ -118,17 +119,11 @@ The `compatible` field is a tri-state string:
 
 The `note` field always cites its source URL and includes support-until dates when available.
 
-### Table (`-o table`)
+### HTML report (`-o html`)
 
-```
-┌──────────────────┬──────────────────┬─────────┬──────┬────────────┬────────┬──────────────────────────────────────────────────────────────┐
-│ NAME             │ NAMESPACE        │ VERSION │ K8S  │ COMPATIBLE │ LATEST │ NOTE                                                         │
-├──────────────────┼──────────────────┼─────────┼──────┼────────────┼────────┼──────────────────────────────────────────────────────────────┤
-│ cert-manager     │ cert-manager     │ v1.14.2 │ 1.30 │ yes        │ 1.18   │ The compatibility matrix at cert-manager.io states v1.14 ... │
-├──────────────────┼──────────────────┼─────────┼──────┼────────────┼────────┼──────────────────────────────────────────────────────────────┤
-│ external-secrets │ external-secrets │ v0.14.2 │ 1.30 │ NO         │ 0.13.x │ The compatibility matrix at external-secrets.io states ESO... │
-└──────────────────┴──────────────────┴─────────┴──────┴────────────┴────────┴──────────────────────────────────────────────────────────────┘
-```
+Writes a styled report to `./kaddons-report.html` by default (or to `--output-path` if specified). JSON output remains the default for stdout pipelines.
+
+![HTML report example](docs/images/kaddons-report-example.png)
 
 ## Database validation (development tool)
 
@@ -147,7 +142,7 @@ A [GitHub Actions workflow](.github/workflows/linkcheck.yml) runs link checks we
 
 ## Accuracy and limitations
 
-The LLM reads each addon's official compatibility page and extracts version support information. It returns `"unknown"` rather than guessing when data is unclear. Results should be treated as a **triage tool** — verify critical decisions against the official documentation linked in each `note` field.
+The LLM reads each addon's official compatibility page and extracts version support information. Analysis is deterministic in ordering and context construction, and each addon is evaluated independently with bounded retries/timeouts. It returns `"unknown"` rather than guessing when data is unclear. Results should be treated as a **triage tool** — verify critical decisions against the official documentation linked in each `note` field.
 
 ## Documentation
 

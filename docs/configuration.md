@@ -21,7 +21,8 @@ kaddons [flags]
 | `--addons` | `-a` | `""` | Comma-separated addon name filter. Only matched addons with these names are analyzed. |
 | `--key` | `-k` | `""` | Gemini API key. Overrides `GEMINI_API_KEY` env var. |
 | `--model` | `-m` | `gemini-3-flash-preview` | Gemini model to use for compatibility analysis. |
-| `--output` | `-o` | `json` | Output format. Must be `json` or `table`. |
+| `--output` | `-o` | `json` | Output format. Must be `json` or `html`. |
+| `--output-path` | | `./kaddons-report.html` | Output file path used when `--output html` is selected. |
 | `--version` | | | Print version, commit hash, and build date. |
 
 ## Database validation tool
@@ -77,21 +78,11 @@ Default format (`-o json`). Returns a `CompatibilityReport` object:
 
 The `compatible` field is always a JSON string, never a boolean or null. This is enforced by the `Status` type's custom `UnmarshalJSON` which normalizes LLM output.
 
-### Table
+### HTML
 
-Activated with `-o table`. Renders a Unicode box-drawing table to stdout.
+Activated with `-o html`. Writes a styled report file to `./kaddons-report.html` by default, or to the `--output-path` location.
 
-Column mapping:
-
-| Column | JSON field |
-|--------|-----------|
-| NAME | `name` |
-| NAMESPACE | `namespace` |
-| VERSION | `installed_version` |
-| K8S | `k8s_version` (from top-level) |
-| COMPATIBLE | `compatible` (`"true"` → `yes`, `"false"` → `NO`, `"unknown"` → `unknown`) |
-| LATEST | `latest_compatible_version` |
-| NOTE | `note` (truncated to 60 characters) |
+![HTML report example](images/kaddons-report-example.png)
 
 ## Progress output
 
@@ -107,8 +98,22 @@ Analyzing with gemini-3-flash-preview...
 Done: 8 compatible, 2 incompatible, 2 unknown
 ```
 
+The `Done: ...` summary is printed as the final stderr line after output is fully written.
+
+Gemini analysis is executed one addon at a time in deterministic sorted order under the same `Analyzing with ...` stage.
+
 This keeps stdout clean for piping JSON output to other tools:
 
 ```bash
 kaddons | jq '.addons[] | select(.compatible == "false")'
 ```
+
+## Retry and timeout policy
+
+All external calls use a shared deterministic retry policy (`internal/resilience`):
+
+- **Gemini calls**: 3 attempts, per-attempt timeout 90s, backoff 1s then 2s
+- **HTTP fetch/EOL/validate calls**: 3 attempts, backoff 500ms then 1s
+- **kubectl calls**: 3 attempts, backoff 500ms then 1s
+
+Retryable conditions include transient transport errors (`timeout`, `EOF`, connection resets), plus HTTP `429` and `5xx`.

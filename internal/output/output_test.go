@@ -2,6 +2,8 @@ package output
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -266,5 +268,61 @@ func TestMarshaledJSON_NoRemovedKeys(t *testing.T) {
 		if strings.Contains(jsonStr, `"`+key+`"`) {
 			t.Errorf("removed field %q still present in JSON output", key)
 		}
+	}
+}
+
+func TestFormatOutput_JSONReturnsParsedAddons(t *testing.T) {
+	raw := `[{"name":"a","namespace":"ns","installed_version":"v1","compatible":"true","note":"ok"}]`
+	addons, err := FormatOutput(raw, "1.30", "json", "")
+	if err != nil {
+		t.Fatalf("FormatOutput(json) error = %v", err)
+	}
+	if len(addons) != 1 {
+		t.Fatalf("FormatOutput(json) returned %d addons, want 1", len(addons))
+	}
+	if addons[0].Name != "a" {
+		t.Fatalf("FormatOutput(json) addon name = %q, want %q", addons[0].Name, "a")
+	}
+}
+
+func TestFormatOutput_HTMLWritesReportFile(t *testing.T) {
+	tempDir := t.TempDir()
+	reportPath := filepath.Join(tempDir, "compatibility-report.html")
+	raw := `[{"name":"cert-manager","namespace":"cert-manager","installed_version":"v1.15.0","compatible":"false","latest_compatible_version":"v1.18.0","note":"Upgrade required"}]`
+
+	addons, err := FormatOutput(raw, "1.31", "html", reportPath)
+	if err != nil {
+		t.Fatalf("FormatOutput(html) error = %v", err)
+	}
+	if len(addons) != 1 {
+		t.Fatalf("FormatOutput(html) returned %d addons, want 1", len(addons))
+	}
+
+	data, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("reading generated report file: %v", err)
+	}
+	content := string(data)
+	requiredSnippets := []string{
+		"kaddons Compatibility Report",
+		"cert-manager",
+		"Upgrade required",
+		"1.31",
+	}
+	for _, snippet := range requiredSnippets {
+		if !strings.Contains(content, snippet) {
+			t.Fatalf("generated HTML missing %q", snippet)
+		}
+	}
+}
+
+func TestFormatOutput_InvalidFormatReturnsError(t *testing.T) {
+	raw := `[{"name":"a","namespace":"ns","installed_version":"v1","compatible":"true","note":"ok"}]`
+	_, err := FormatOutput(raw, "1.30", "table", "")
+	if err == nil {
+		t.Fatalf("FormatOutput(table) expected error")
+	}
+	if !strings.Contains(err.Error(), "unsupported output format") {
+		t.Fatalf("FormatOutput(table) error = %v, want unsupported output format", err)
 	}
 }

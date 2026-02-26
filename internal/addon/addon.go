@@ -35,6 +35,13 @@ type EOLCycle struct {
 	LTS               any    `json:"lts"`
 }
 
+// EOLProductCatalogEntry represents a single product from endoflife.date v1.
+type EOLProductCatalogEntry struct {
+	Name    string   `json:"name"`
+	Label   string   `json:"label"`
+	Aliases []string `json:"aliases"`
+}
+
 // LoadAddons parses the embedded addon database.
 func LoadAddons() ([]Addon, error) {
 	var f addonsFile
@@ -151,6 +158,44 @@ func buildEOLProductSlugs(groups []eolSlugAliasGroup) map[string]string {
 func LookupEOLSlug(addonName string) (string, bool) {
 	slug, ok := eolProductSlugs[normalizeName(addonName)]
 	return slug, ok
+}
+
+// BuildRuntimeEOLSlugLookup builds a normalized name->slug map from the live EOL catalog.
+func BuildRuntimeEOLSlugLookup(products []EOLProductCatalogEntry) map[string]string {
+	lookup := make(map[string]string)
+	for _, product := range products {
+		slug := strings.TrimSpace(strings.ToLower(product.Name))
+		if slug == "" {
+			continue
+		}
+		registerEOLLookupKey(lookup, slug, slug)
+		registerEOLLookupKey(lookup, product.Label, slug)
+		for _, alias := range product.Aliases {
+			registerEOLLookupKey(lookup, alias, slug)
+		}
+	}
+	return lookup
+}
+
+func registerEOLLookupKey(lookup map[string]string, rawName string, slug string) {
+	normalized := normalizeName(rawName)
+	if normalized == "" {
+		return
+	}
+	if _, exists := lookup[normalized]; !exists {
+		lookup[normalized] = slug
+	}
+}
+
+// LookupEOLSlugWithRuntime resolves against live catalog first, then static fallback aliases.
+func LookupEOLSlugWithRuntime(addonName string, runtimeLookup map[string]string) (string, bool) {
+	normalizedAddonName := normalizeName(addonName)
+	if runtimeLookup != nil {
+		if slug, ok := runtimeLookup[normalizedAddonName]; ok {
+			return slug, true
+		}
+	}
+	return LookupEOLSlug(addonName)
 }
 
 type addonEntry struct {

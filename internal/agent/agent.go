@@ -5,12 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
+	"sort"
 	"strings"
+	"time"
+	"unicode/utf8"
 
 	"github.com/qbandev/kaddons/internal/addon"
 	"github.com/qbandev/kaddons/internal/cluster"
 	"github.com/qbandev/kaddons/internal/fetch"
 	"github.com/qbandev/kaddons/internal/output"
+	"github.com/qbandev/kaddons/internal/resilience"
 	"google.golang.org/genai"
 )
 
@@ -24,7 +29,7 @@ type addonWithInfo struct {
 }
 
 // Run executes the Plan-and-Execute pipeline.
-func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addonsFilter, outputFormat string) error {
+func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addonsFilter, outputFormat, outputPath string) error {
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{
 		APIKey:  apiKey,
 		Backend: genai.BackendGeminiAPI,
@@ -71,6 +76,13 @@ func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addo
 		}
 		detected = filtered
 	}
+	sort.SliceStable(detected, func(leftIndex int, rightIndex int) bool {
+		left := detected[leftIndex]
+		right := detected[rightIndex]
+		leftKey := strings.ToLower(left.Name) + "|" + strings.ToLower(left.Namespace) + "|" + strings.ToLower(left.Version)
+		rightKey := strings.ToLower(right.Name) + "|" + strings.ToLower(right.Namespace) + "|" + strings.ToLower(right.Version)
+		return leftKey < rightKey
+	})
 	fmt.Fprintf(os.Stderr, "Discovered %d workloads\n", len(detected))
 
 	// Phase 2: Match addons against DB, deduplicate by addon name (prefer entry with version)
@@ -104,9 +116,22 @@ func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addo
 
 	// Fetch compatibility pages and EOL data for matched addons
 	fmt.Fprintf(os.Stderr, "Enriching %d addons...\n", len(bestByName))
+	runtimeEOLSlugLookup := make(map[string]string)
+	products, err := fetch.EOLProducts(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: EOL product catalog fetch failed, using static fallback aliases: %v\n", err)
+	} else {
+		runtimeEOLSlugLookup = addon.BuildRuntimeEOLSlugLookup(products)
+	}
 	enriched := make([]addonWithInfo, 0, len(bestByName))
 	fetchedURLs := make(map[string]string) // cache: URL -> content
-	for _, entry := range bestByName {
+	orderedAddonNames := make([]string, 0, len(bestByName))
+	for addonName := range bestByName {
+		orderedAddonNames = append(orderedAddonNames, addonName)
+	}
+	sort.Strings(orderedAddonNames)
+	for _, addonName := range orderedAddonNames {
+		entry := bestByName[addonName]
 		info := entry.info
 		if info.DBMatch.CompatibilityMatrixURL != "" {
 			info.CompatibilityURL = info.DBMatch.CompatibilityMatrixURL
@@ -122,7 +147,7 @@ func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addo
 				}
 			}
 		}
-		if slug, ok := addon.LookupEOLSlug(info.Name); ok {
+		if slug, ok := addon.LookupEOLSlugWithRuntime(info.Name, runtimeEOLSlugLookup); ok {
 			cycles, err := fetch.EOLData(ctx, slug)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: EOL data fetch failed for %s: %v\n", info.Name, err)
@@ -133,91 +158,209 @@ func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addo
 		enriched = append(enriched, info)
 	}
 	if len(enriched) == 0 {
-		return output.FormatOutput("[]", k8sVersion, outputFormat)
+		if _, err := output.FormatOutput("[]", k8sVersion, outputFormat, outputPath); err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "Done: %d compatible, %d incompatible, %d unknown\n", 0, 0, 0)
+		return nil
 	}
 
 	// Phase 3: LLM analysis — single call with all data pre-collected
 	fmt.Fprintf(os.Stderr, "Analyzing with %s...\n", model)
-	return analyzeCompatibility(ctx, client, model, k8sVersion, enriched, outputFormat)
+	return analyzeCompatibility(ctx, client, model, k8sVersion, enriched, outputFormat, outputPath)
 }
 
-const analysisSystemPrompt = `You are a Kubernetes addon compatibility analyzer. You will receive pre-collected data about addons installed in a cluster, including their compatibility matrix page content when available.
-
-Your ONLY job is to analyze the provided data and determine compatibility. You must produce a strict JSON array (no markdown code fences, no extra text before or after) with this schema for EACH addon provided:
-
+const analysisSystemPrompt = `You are a deterministic Kubernetes addon compatibility analyzer.
+You will receive exactly ONE addon at a time with structured evidence.
+Return exactly one JSON object (no markdown, no code fences, no extra keys):
 {
   "name": "addon-name",
   "namespace": "namespace",
   "installed_version": "v1.2.3",
   "compatible": "true"|"false"|"unknown",
   "latest_compatible_version": "v1.2.5",
-  "note": "explanation with source citation, upgrade status, and support dates"
+  "note": "source-cited explanation"
 }
 
-You MUST use exact strings "true", "false", or "unknown" — not boolean literals or null.
-
 Rules:
-- You MUST include ALL addons from the input — do not skip any
-- "compatible" must be "unknown" if you cannot determine compatibility from the provided data
-- Only include "latest_compatible_version" if you found evidence in the compatibility page or EOL data
+- Use only evidence provided in input.
+- "compatible" must be string "true" | "false" | "unknown" only.
+- If evidence is insufficient, set "compatible" to "unknown".
+- Include source URL(s) in note when available.
+- Preserve addon identity fields exactly from input.
+- Output must be valid JSON object only.`
 
-Notes (source-cited, comprehensive):
-- "note" must cite the source URL and include all relevant context in a single field
-- Include the compatibility source URL citation: e.g. "The compatibility matrix at <URL> states v1.14 supports K8s 1.24-1.31."
-- When determinable from eol_data, include the supported-until date: e.g. "Supported until 2025-09-10."
-- When the installed version is confirmed incompatible, state upgrade-required status: e.g. "Upgrade required: <URL> states v0.14.x only supports K8s 1.32."
-- If the compatibility page lacks structured version data, explain what the page contained: e.g. "The page at <URL> is an installation guide without a version compatibility matrix."
-- If eol_data is provided, use it to determine version support status and latest version. Prefer the compatibility page for K8s-specific compatibility; use EOL data as supplementary context for version lifecycle
-- Base your analysis ONLY on the page content and EOL data provided — do not hallucinate compatibility information`
+var evidenceLinePattern = regexp.MustCompile(`(?i)(kubernetes|k8s|compat|support|version|matrix|tested|eol|lts|deprecated|upgrade|required)`)
+var evidenceK8sPattern = regexp.MustCompile(`(?i)\b(kubernetes|k8s)\b`)
+var evidenceVersionPattern = regexp.MustCompile(`(?i)\bv?\d+\.\d+(?:\.\d+)?\b`)
+var evidenceSupportPattern = regexp.MustCompile(`(?i)(compat|support|matrix|tested|require|recommended)`)
+var evidenceNegationPattern = regexp.MustCompile(`(?i)(non[- ]matrix|without (?:a )?(?:compatibility|support|version|matrix)|no (?:compatibility|support|version|matrix)|does not (?:contain|include)|lacks?)`)
 
-func analyzeCompatibility(ctx context.Context, client *genai.Client, model string, k8sVersion string, addons []addonWithInfo, outputFormat string) error {
-	dataPayload := struct {
-		K8sVersion string          `json:"k8s_version"`
-		Addons     []addonWithInfo `json:"addons"`
-	}{
-		K8sVersion: k8sVersion,
-		Addons:     addons,
+func analyzeCompatibility(ctx context.Context, client *genai.Client, model string, k8sVersion string, addons []addonWithInfo, outputFormat string, outputPath string) error {
+	results := make([]output.AddonCompatibility, 0, len(addons))
+	for addonIndex, addonInfo := range addons {
+		fmt.Fprintf(
+			os.Stderr,
+			"Analyzing addon %d/%d: %s (%s)\n",
+			addonIndex+1,
+			len(addons),
+			addonInfo.Name,
+			addonInfo.Namespace,
+		)
+		result, err := analyzeSingleAddon(ctx, client, model, k8sVersion, addonInfo)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: fallback to unknown for %s/%s due to analysis error: %v\n", addonInfo.Name, addonInfo.Namespace, err)
+			result = output.AddonCompatibility{
+				Name:             addonInfo.Name,
+				Namespace:        addonInfo.Namespace,
+				InstalledVersion: addonInfo.Version,
+				Compatible:       output.StatusUnknown,
+				Note:             fmt.Sprintf("Analysis error: %v", err),
+			}
+			if addonInfo.CompatibilityURL != "" {
+				result.Note += fmt.Sprintf(" Source: %s", addonInfo.CompatibilityURL)
+			}
+		}
+		fmt.Fprintf(
+			os.Stderr,
+			"Completed addon %d/%d: %s -> %s\n",
+			addonIndex+1,
+			len(addons),
+			result.Name,
+			result.Compatible,
+		)
+		results = append(results, result)
 	}
 
-	dataJSON, err := json.MarshalIndent(dataPayload, "", "  ")
+	resultsJSON, err := json.Marshal(results)
 	if err != nil {
-		return fmt.Errorf("marshaling addon data: %w", err)
+		return fmt.Errorf("marshaling linear analysis results: %w", err)
+	}
+	formattedResults, err := output.FormatOutput(string(resultsJSON), k8sVersion, outputFormat, outputPath)
+	if err != nil {
+		return err
+	}
+
+	var compatible, incompatible, unknown int
+	for _, result := range formattedResults {
+		switch result.Compatible {
+		case output.StatusTrue:
+			compatible++
+		case output.StatusFalse:
+			incompatible++
+		default:
+			unknown++
+		}
+	}
+	fmt.Fprintf(os.Stderr, "Done: %d compatible, %d incompatible, %d unknown\n", compatible, incompatible, unknown)
+
+	return nil
+}
+
+type singleAddonAnalysisInput struct {
+	K8sVersion string                 `json:"k8s_version"`
+	Addon      map[string]interface{} `json:"addon"`
+}
+
+func analyzeSingleAddon(ctx context.Context, client *genai.Client, model, k8sVersion string, addonInfo addonWithInfo) (output.AddonCompatibility, error) {
+	prunedCompatibilityEvidence := pruneEvidenceText(addonInfo.CompatibilityContent, 7000, 60)
+	eolSummary := make([]string, 0, len(addonInfo.EOLData))
+	for index, cycle := range addonInfo.EOLData {
+		if index >= 6 {
+			break
+		}
+		eolSummary = append(eolSummary, fmt.Sprintf("cycle=%s latest=%s eol=%v releaseDate=%s", cycle.Cycle, cycle.Latest, cycle.EOL, cycle.ReleaseDate))
+	}
+
+	analysisInput := singleAddonAnalysisInput{
+		K8sVersion: k8sVersion,
+		Addon: map[string]interface{}{
+			"name":                    addonInfo.Name,
+			"namespace":               addonInfo.Namespace,
+			"installed_version":       addonInfo.Version,
+			"source":                  addonInfo.Source,
+			"compatibility_url":       addonInfo.CompatibilityURL,
+			"compatibility_excerpt":   prunedCompatibilityEvidence,
+			"fetch_error":             addonInfo.FetchError,
+			"eol_summary":             eolSummary,
+			"db_name":                 "",
+			"db_project_url":          "",
+			"db_repository":           "",
+			"db_compatibility_source": "",
+		},
+	}
+	if addonInfo.DBMatch != nil {
+		analysisInput.Addon["db_name"] = addonInfo.DBMatch.Name
+		analysisInput.Addon["db_project_url"] = addonInfo.DBMatch.ProjectURL
+		analysisInput.Addon["db_repository"] = addonInfo.DBMatch.Repository
+		analysisInput.Addon["db_compatibility_source"] = addonInfo.DBMatch.CompatibilityMatrixURL
+	}
+
+	inputJSON, err := json.MarshalIndent(analysisInput, "", "  ")
+	if err != nil {
+		return output.AddonCompatibility{}, fmt.Errorf("marshaling single-addon payload: %w", err)
+	}
+
+	deterministicTemperature := float32(0)
+	deterministicTopP := float32(1)
+	deterministicTopK := float32(1)
+	deterministicSeed := int32(42)
+	responseJSONSchema := map[string]interface{}{
+		"type": "object",
+		"required": []string{
+			"name",
+			"namespace",
+			"installed_version",
+			"compatible",
+			"note",
+		},
+		"properties": map[string]interface{}{
+			"name":                      map[string]interface{}{"type": "string"},
+			"namespace":                 map[string]interface{}{"type": "string"},
+			"installed_version":         map[string]interface{}{"type": "string"},
+			"compatible":                map[string]interface{}{"type": "string", "enum": []string{"true", "false", "unknown"}},
+			"latest_compatible_version": map[string]interface{}{"type": "string"},
+			"note":                      map[string]interface{}{"type": "string"},
+		},
+		"additionalProperties": false,
 	}
 
 	config := &genai.GenerateContentConfig{
-		SystemInstruction: genai.NewContentFromText(analysisSystemPrompt, genai.RoleUser),
+		SystemInstruction:  genai.NewContentFromText(analysisSystemPrompt, genai.RoleUser),
+		Temperature:        &deterministicTemperature,
+		TopP:               &deterministicTopP,
+		TopK:               &deterministicTopK,
+		Seed:               &deterministicSeed,
+		CandidateCount:     1,
+		ResponseMIMEType:   "application/json",
+		ResponseJsonSchema: responseJSONSchema,
 	}
 
-	resp, err := client.Models.GenerateContent(ctx, model, []*genai.Content{
+	resp, err := generateContentWithRetry(ctx, client, model, []*genai.Content{
 		genai.NewContentFromText(
-			fmt.Sprintf("Analyze compatibility for these addons:\n\n%s", string(dataJSON)),
+			fmt.Sprintf("Analyze compatibility for this addon:\n\n%s", string(inputJSON)),
 			genai.RoleUser,
 		),
 	}, config)
 	if err != nil {
-		return fmt.Errorf("LLM analysis failed: %w", err)
+		return output.AddonCompatibility{}, err
 	}
-
 	raw := collectTextResponse(resp)
 	extracted := output.ExtractJSON(raw)
-
-	var results []output.AddonCompatibility
-	if err := json.Unmarshal([]byte(extracted), &results); err == nil {
-		var compatible, incompatible, unknown int
-		for _, r := range results {
-			switch r.Compatible {
-			case output.StatusTrue:
-				compatible++
-			case output.StatusFalse:
-				incompatible++
-			default:
-				unknown++
-			}
-		}
-		fmt.Fprintf(os.Stderr, "Done: %d compatible, %d incompatible, %d unknown\n", compatible, incompatible, unknown)
+	var result output.AddonCompatibility
+	if err := json.Unmarshal([]byte(extracted), &result); err != nil {
+		return output.AddonCompatibility{}, fmt.Errorf("parsing single-addon JSON output: %w", err)
 	}
-
-	return output.FormatOutput(extracted, k8sVersion, outputFormat)
+	if result.Name == "" {
+		result.Name = addonInfo.Name
+	}
+	if result.Namespace == "" {
+		result.Namespace = addonInfo.Namespace
+	}
+	if result.InstalledVersion == "" {
+		result.InstalledVersion = addonInfo.Version
+	}
+	return result, nil
 }
 
 func collectTextResponse(resp *genai.GenerateContentResponse) string {
@@ -236,4 +379,202 @@ func collectTextResponse(resp *genai.GenerateContentResponse) string {
 		}
 	}
 	return sb.String()
+}
+
+func pruneEvidenceText(input string, maxChars int, maxLines int) string {
+	trimmedInput := strings.TrimSpace(input)
+	if trimmedInput == "" {
+		return ""
+	}
+	normalizedLines := make([]string, 0)
+	for _, line := range strings.Split(trimmedInput, "\n") {
+		cleanLine := strings.Join(strings.Fields(strings.TrimSpace(line)), " ")
+		if cleanLine != "" {
+			normalizedLines = append(normalizedLines, cleanLine)
+		}
+	}
+	if len(normalizedLines) == 0 {
+		return ""
+	}
+
+	type scoredAnchor struct {
+		index int
+		score int
+	}
+	lineBudget := maxLines
+	if lineBudget <= 0 || lineBudget > len(normalizedLines) {
+		lineBudget = len(normalizedLines)
+	}
+	selectedByIndex := make(map[int]bool, lineBudget)
+	selectedCount := 0
+	addLine := func(lineIndex int) {
+		if lineIndex < 0 || lineIndex >= len(normalizedLines) {
+			return
+		}
+		if selectedCount >= lineBudget {
+			return
+		}
+		if selectedByIndex[lineIndex] {
+			return
+		}
+		selectedByIndex[lineIndex] = true
+		selectedCount++
+	}
+
+	// Keep a deterministic header slice for document context.
+	const leadingContextLines = 12
+	for lineIndex := 0; lineIndex < len(normalizedLines) && lineIndex < leadingContextLines; lineIndex++ {
+		addLine(lineIndex)
+	}
+
+	anchors := make([]scoredAnchor, 0, len(normalizedLines))
+	for lineIndex, line := range normalizedLines {
+		score := 0
+		hasK8s := evidenceK8sPattern.MatchString(line)
+		hasVersion := evidenceVersionPattern.MatchString(line)
+		hasSupportSignal := evidenceSupportPattern.MatchString(line)
+		if hasK8s && hasVersion {
+			score += 5
+		}
+		if hasSupportSignal {
+			score += 3
+		}
+		if hasVersion {
+			score += 2
+		}
+		if evidenceLinePattern.MatchString(line) {
+			score += 1
+		}
+		if evidenceNegationPattern.MatchString(line) {
+			score -= 4
+		}
+		if score > 0 {
+			anchors = append(anchors, scoredAnchor{
+				index: lineIndex,
+				score: score,
+			})
+		}
+	}
+	sort.SliceStable(anchors, func(leftIndex, rightIndex int) bool {
+		left := anchors[leftIndex]
+		right := anchors[rightIndex]
+		if left.score == right.score {
+			return left.index < right.index
+		}
+		return left.score > right.score
+	})
+
+	// Preserve table rows and neighboring values around strongest anchors first.
+	const contextBefore = 2
+	const contextAfter = 2
+	for _, anchor := range anchors {
+		if selectedCount >= lineBudget {
+			break
+		}
+		// Add anchor first, then nearest context lines around it.
+		addLine(anchor.index)
+		for offset := 1; offset <= contextBefore || offset <= contextAfter; offset++ {
+			if offset <= contextAfter {
+				addLine(anchor.index + offset)
+			}
+			if offset <= contextBefore {
+				addLine(anchor.index - offset)
+			}
+		}
+	}
+
+	// Fill remaining slots deterministically from the start.
+	for lineIndex := 0; lineIndex < len(normalizedLines) && selectedCount < lineBudget; lineIndex++ {
+		addLine(lineIndex)
+	}
+
+	orderedLineIndexes := make([]int, 0, len(selectedByIndex))
+	for lineIndex := range selectedByIndex {
+		orderedLineIndexes = append(orderedLineIndexes, lineIndex)
+	}
+	sort.Ints(orderedLineIndexes)
+	selectedLines := make([]string, 0, len(orderedLineIndexes))
+	for _, lineIndex := range orderedLineIndexes {
+		selectedLines = append(selectedLines, normalizedLines[lineIndex])
+	}
+	if len(selectedLines) == 0 {
+		selectedLines = normalizedLines
+	}
+
+	var builder strings.Builder
+	for _, line := range selectedLines {
+		if builder.Len() > 0 {
+			builder.WriteString("\n")
+		}
+		if maxChars > 0 && builder.Len()+len(line) > maxChars {
+			remaining := maxChars - builder.Len()
+			if remaining > 0 {
+				builder.WriteString(truncateToValidUTF8Prefix(line, remaining))
+			}
+			break
+		}
+		builder.WriteString(line)
+	}
+	return strings.TrimSpace(builder.String())
+}
+
+func truncateToValidUTF8Prefix(text string, maxBytes int) string {
+	if maxBytes <= 0 || text == "" {
+		return ""
+	}
+	if len(text) <= maxBytes {
+		return text
+	}
+
+	truncateIndex := maxBytes
+	for truncateIndex > 0 && !utf8.ValidString(text[:truncateIndex]) {
+		truncateIndex--
+	}
+	if truncateIndex <= 0 {
+		return ""
+	}
+	return text[:truncateIndex]
+}
+
+func generateContentWithRetry(
+	ctx context.Context,
+	client *genai.Client,
+	model string,
+	contents []*genai.Content,
+	config *genai.GenerateContentConfig,
+) (*genai.GenerateContentResponse, error) {
+	const perAttemptTimeout = 90 * time.Second
+	policy := resilience.RetryPolicy{
+		Attempts:     3,
+		InitialDelay: time.Second,
+		MaxDelay:     2 * time.Second,
+		Multiplier:   2,
+	}
+	attemptCounter := 0
+	return resilience.RetryWithResult(ctx, policy, isTransientLLMError, func(callCtx context.Context) (*genai.GenerateContentResponse, error) {
+		attemptCounter++
+		attemptContext, cancelAttempt := context.WithTimeout(callCtx, perAttemptTimeout)
+		response, err := client.Models.GenerateContent(attemptContext, model, contents, config)
+		cancelAttempt()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Gemini analysis attempt %d/%d failed: %v\n", attemptCounter, policy.Attempts, err)
+			if isTransientLLMError(err) && attemptCounter < policy.Attempts {
+				fmt.Fprintln(os.Stderr, "Retrying Gemini analysis...")
+			}
+			return nil, err
+		}
+		return response, nil
+	})
+}
+
+func isTransientLLMError(err error) bool {
+	if resilience.IsRetryableNetworkError(err) {
+		return true
+	}
+	errorText := strings.ToLower(err.Error())
+	return strings.Contains(errorText, "resource_exhausted") ||
+		strings.Contains(errorText, "429") ||
+		strings.Contains(errorText, "503") ||
+		strings.Contains(errorText, "500") ||
+		strings.Contains(errorText, "unavailable")
 }

@@ -1,6 +1,10 @@
 package fetch
 
-import "testing"
+import (
+	"strings"
+	"testing"
+	"unicode/utf8"
+)
 
 func TestGitHubRawURL(t *testing.T) {
 	tests := []struct {
@@ -87,5 +91,71 @@ func TestGitHubRawURL(t *testing.T) {
 				t.Errorf("GitHubRawURL(%q)\n  got:  %q\n  want: %q", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestParseEOLProducts(t *testing.T) {
+	body := []byte(`{
+		"schema_version":"1.2.0",
+		"result":[
+			{"name":"argo-cd","aliases":["argocd"],"label":"Argo CD"},
+			{"name":"keda","aliases":[],"label":"KEDA"}
+		]
+	}`)
+
+	products, err := parseEOLProducts(body)
+	if err != nil {
+		t.Fatalf("parseEOLProducts() error = %v", err)
+	}
+
+	if len(products) != 2 {
+		t.Fatalf("parseEOLProducts() length = %d, want 2", len(products))
+	}
+	if products[0].Name != "argo-cd" {
+		t.Fatalf("products[0].Name = %q, want %q", products[0].Name, "argo-cd")
+	}
+	if len(products[0].Aliases) != 1 || products[0].Aliases[0] != "argocd" {
+		t.Fatalf("products[0].Aliases = %v, want [argocd]", products[0].Aliases)
+	}
+}
+
+func TestParseEOLProducts_InvalidJSON(t *testing.T) {
+	_, err := parseEOLProducts([]byte(`{"result":[`))
+	if err == nil {
+		t.Fatal("parseEOLProducts() expected error for invalid JSON")
+	}
+}
+
+func TestNormalizeFetchedContent_PreservesTableLikeLines(t *testing.T) {
+	html := `
+<html><body>
+  <h2>Tested versions</h2>
+  <table>
+    <tr><th>Argo CD version</th><th>Kubernetes versions</th></tr>
+    <tr><td>3.3</td><td>v1.34, v1.33, v1.32, v1.31</td></tr>
+  </table>
+</body></html>`
+
+	got := normalizeFetchedContent(html, false)
+
+	if !strings.Contains(got, "Tested versions") {
+		t.Fatalf("normalizeFetchedContent() missing heading: %q", got)
+	}
+	if !strings.Contains(got, "Argo CD version") || !strings.Contains(got, "Kubernetes versions") {
+		t.Fatalf("normalizeFetchedContent() missing table headers: %q", got)
+	}
+	if !strings.Contains(got, "v1.31") {
+		t.Fatalf("normalizeFetchedContent() missing table cell content: %q", got)
+	}
+}
+
+func TestNormalizeFetchedContent_UTF8SafeTruncation(t *testing.T) {
+	large := strings.Repeat("😀", 40000) // 160k bytes
+	got := normalizeFetchedContent(large, true)
+	if len(got) > 120000 {
+		t.Fatalf("normalizeFetchedContent() len = %d, want <= 120000", len(got))
+	}
+	if !utf8.ValidString(got) {
+		t.Fatalf("normalizeFetchedContent() produced invalid UTF-8")
 	}
 }

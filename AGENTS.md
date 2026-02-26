@@ -26,7 +26,7 @@ The LLM is only used in Phase 3. Phases 1 and 2 are fully deterministic.
 | `internal/addon/addon.go` | Embedded addon DB (`go:embed`), 6-pass matching algorithm, EOL slugs |
 | `internal/cluster/cluster.go` | kubectl interaction, workload discovery, version detection |
 | `internal/fetch/fetch.go` | HTTP fetching, GitHub raw URL conversion, EOL data |
-| `internal/output/output.go` | JSON/table output, `Status` tri-state type, `ExtractJSON` |
+| `internal/output/output.go` | JSON/HTML output, `Status` tri-state type, `ExtractJSON` |
 | `internal/validate/validate.go` | DB validation library — URL reachability + matrix content checks |
 | `internal/addon/k8s_universal_addons.json` | 668-addon database (embedded at build time) |
 
