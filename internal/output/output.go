@@ -115,28 +115,28 @@ func printTable(addons []AddonCompatibility, k8sVersion string) {
 
 	hLine := func(left, mid, right string) string {
 		var sb strings.Builder
-		sb.WriteString(left)
+		_, _ = sb.WriteString(left)
 		for i, w := range widths {
-			sb.WriteString(strings.Repeat("─", w+2))
+			_, _ = sb.WriteString(strings.Repeat("─", w+2))
 			if i < len(widths)-1 {
-				sb.WriteString(mid)
+				_, _ = sb.WriteString(mid)
 			}
 		}
-		sb.WriteString(right)
+		_, _ = sb.WriteString(right)
 		return sb.String()
 	}
 
 	dataLine := func(r row) string {
 		fields := []string{r.name, r.namespace, r.version, r.k8s, r.compat, r.latest, r.note}
 		var sb strings.Builder
-		sb.WriteString("│")
+		_, _ = sb.WriteString("│")
 		for i, f := range fields {
-			sb.WriteString(fmt.Sprintf(" %-*s ", widths[i], f))
+			_, _ = fmt.Fprintf(&sb, " %-*s ", widths[i], f)
 			if i < len(fields)-1 {
-				sb.WriteString("│")
+				_, _ = sb.WriteString("│")
 			}
 		}
-		sb.WriteString("│")
+		_, _ = sb.WriteString("│")
 		return sb.String()
 	}
 
