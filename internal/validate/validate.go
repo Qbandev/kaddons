@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
-	"strings"
 	"sync"
 	"time"
 
@@ -233,31 +232,7 @@ func doRequestWithRetry(ctx context.Context, client *http.Client, request *http.
 		MaxDelay:     time.Second,
 		Multiplier:   2,
 	}
-	attemptCounter := 0
-	return resilience.RetryWithResult(ctx, policy, isRetryableRequestError, func(callCtx context.Context) (*http.Response, error) {
-		attemptCounter++
-		reqForAttempt := request.Clone(callCtx)
-		response, err := client.Do(reqForAttempt) // #nosec G704 -- rawURL is pre-validated by ValidatePublicHTTPSURL
-		if err != nil {
-			return nil, err
-		}
-		if isRetryableStatusCode(response.StatusCode) {
-			if attemptCounter >= policy.Attempts {
-				return response, nil
-			}
-			_ = response.Body.Close()
-			return nil, fmt.Errorf("retryable HTTP status %d", response.StatusCode)
-		}
-		return response, nil
-	})
-}
-
-func isRetryableStatusCode(statusCode int) bool {
-	return resilience.IsRetryableHTTPStatus(statusCode)
-}
-
-func isRetryableRequestError(err error) bool {
-	return resilience.IsRetryableNetworkError(err) || strings.Contains(strings.ToLower(err.Error()), "retryable http status")
+	return resilience.DoHTTPRequestWithRetry(ctx, client, request, policy)
 }
 
 // hasK8sMatrix checks whether page content contains K8s version compatibility data.

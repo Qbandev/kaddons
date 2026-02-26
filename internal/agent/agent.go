@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/qbandev/kaddons/internal/addon"
 	"github.com/qbandev/kaddons/internal/cluster"
@@ -464,13 +465,31 @@ func pruneEvidenceText(input string, maxChars int, maxLines int) string {
 		if maxChars > 0 && builder.Len()+len(line) > maxChars {
 			remaining := maxChars - builder.Len()
 			if remaining > 0 {
-				builder.WriteString(line[:remaining])
+				builder.WriteString(truncateToValidUTF8Prefix(line, remaining))
 			}
 			break
 		}
 		builder.WriteString(line)
 	}
 	return strings.TrimSpace(builder.String())
+}
+
+func truncateToValidUTF8Prefix(text string, maxBytes int) string {
+	if maxBytes <= 0 || text == "" {
+		return ""
+	}
+	if len(text) <= maxBytes {
+		return text
+	}
+
+	truncateIndex := maxBytes
+	for truncateIndex > 0 && !utf8.ValidString(text[:truncateIndex]) {
+		truncateIndex--
+	}
+	if truncateIndex <= 0 {
+		return ""
+	}
+	return text[:truncateIndex]
 }
 
 func generateContentWithRetry(

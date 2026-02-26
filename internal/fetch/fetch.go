@@ -231,29 +231,5 @@ func doRequestWithRetry(ctx context.Context, client *http.Client, request *http.
 		MaxDelay:     time.Second,
 		Multiplier:   2,
 	}
-	attemptCounter := 0
-	return resilience.RetryWithResult(ctx, policy, isRetryableHTTPError, func(callCtx context.Context) (*http.Response, error) {
-		attemptCounter++
-		reqForAttempt := request.Clone(callCtx)
-		resp, err := client.Do(reqForAttempt) // #nosec G704 -- request URLs are validated/fixed by callers
-		if err != nil {
-			return nil, err
-		}
-		if isRetryableHTTPStatus(resp.StatusCode) {
-			if attemptCounter >= policy.Attempts {
-				return resp, nil
-			}
-			_ = resp.Body.Close()
-			return nil, fmt.Errorf("retryable HTTP status %d", resp.StatusCode)
-		}
-		return resp, nil
-	})
-}
-
-func isRetryableHTTPStatus(statusCode int) bool {
-	return resilience.IsRetryableHTTPStatus(statusCode)
-}
-
-func isRetryableHTTPError(err error) bool {
-	return resilience.IsRetryableNetworkError(err) || strings.Contains(strings.ToLower(err.Error()), "retryable http status")
+	return resilience.DoHTTPRequestWithRetry(ctx, client, request, policy)
 }

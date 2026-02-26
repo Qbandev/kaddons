@@ -76,6 +76,32 @@ func TestRetryPolicy_BackoffCapped(t *testing.T) {
 	}
 }
 
+func TestRetryWithResult_ReturnsContextErrorWhenCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	policy := RetryPolicy{
+		Attempts:     3,
+		InitialDelay: 200 * time.Millisecond,
+		MaxDelay:     200 * time.Millisecond,
+		Multiplier:   2,
+	}
+
+	attempts := 0
+	_, err := RetryWithResult(ctx, policy, func(err error) bool {
+		return errors.Is(err, errRetryable)
+	}, func(callCtx context.Context) (string, error) {
+		attempts++
+		cancel() // cancel before retry backoff wait begins
+		return "", errRetryable
+	})
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("RetryWithResult() error = %v, want context.Canceled", err)
+	}
+	if attempts != 1 {
+		t.Fatalf("RetryWithResult() attempts = %d, want 1", attempts)
+	}
+}
+
 var (
 	errRetryable = errors.New("retryable")
 	errTerminal  = errors.New("terminal")

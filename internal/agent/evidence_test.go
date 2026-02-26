@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestPruneEvidenceText_IsDeterministicAndBounded(t *testing.T) {
@@ -63,5 +64,16 @@ func TestIsTransientLLMError_ClassifiesRetryable(t *testing.T) {
 	}
 	if isTransientLLMError(errors.New("invalid request body")) {
 		t.Fatalf("expected terminal error to be non-retryable")
+	}
+}
+
+func TestTruncateToValidUTF8Prefix_RespectsRuneBoundary(t *testing.T) {
+	text := "hello 😀 world"
+	got := truncateToValidUTF8Prefix(text, 8) // truncates inside emoji byte sequence if naive
+	if !utf8.ValidString(got) {
+		t.Fatalf("truncateToValidUTF8Prefix() returned invalid UTF-8: %q", got)
+	}
+	if got != "hello " {
+		t.Fatalf("truncateToValidUTF8Prefix() = %q, want %q", got, "hello ")
 	}
 }

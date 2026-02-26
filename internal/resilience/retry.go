@@ -3,6 +3,7 @@ package resilience
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"net"
@@ -112,4 +113,48 @@ func IsRetryableNetworkError(err error) bool {
 		strings.Contains(errText, "unexpected eof") ||
 		strings.Contains(errText, "tls handshake timeout") ||
 		strings.Contains(errText, "service unavailable")
+}
+
+// DoHTTPRequestWithRetry performs an HTTP request with the given retry policy.
+// Retryable HTTP statuses (429/5xx) are retried until the attempt budget is exhausted.
+func DoHTTPRequestWithRetry(
+	ctx context.Context,
+	client *http.Client,
+	request *http.Request,
+	policy RetryPolicy,
+) (*http.Response, error) {
+	attemptCounter := 0
+	return RetryWithResult(ctx, policy, IsRetryableHTTPRequestError, func(callCtx context.Context) (*http.Response, error) {
+		attemptCounter++
+		requestForAttempt := request.Clone(callCtx)
+		response, err := client.Do(requestForAttempt) // #nosec G704 -- caller controls URL validation and request construction
+		if err != nil {
+			return nil, err
+		}
+		if IsRetryableHTTPStatus(response.StatusCode) {
+			if attemptCounter >= policy.Attempts {
+				return response, nil
+			}
+			_ = response.Body.Close()
+			return nil, retryableHTTPStatusError{statusCode: response.StatusCode}
+		}
+		return response, nil
+	})
+}
+
+// IsRetryableHTTPRequestError classifies retryable transport/status errors for HTTP wrappers.
+func IsRetryableHTTPRequestError(err error) bool {
+	if IsRetryableNetworkError(err) {
+		return true
+	}
+	var retryStatusError retryableHTTPStatusError
+	return errors.As(err, &retryStatusError)
+}
+
+type retryableHTTPStatusError struct {
+	statusCode int
+}
+
+func (err retryableHTTPStatusError) Error() string {
+	return fmt.Sprintf("retryable HTTP status %d", err.statusCode)
 }
