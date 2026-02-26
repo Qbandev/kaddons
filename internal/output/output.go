@@ -130,17 +130,29 @@ func writeHTMLReport(addons []AddonCompatibility, k8sVersion string, outputPath 
 	if outputPath == "" {
 		outputPath = "./kaddons-report.html"
 	}
+	outputPath = filepath.Clean(outputPath)
+	outputDirectoryPath := filepath.Dir(outputPath)
+	outputFileName := filepath.Base(outputPath)
+	if outputFileName == "." || outputFileName == string(filepath.Separator) {
+		return fmt.Errorf("invalid output path: %s", outputPath)
+	}
 
 	reportTemplate, err := template.New("kaddons-report").Parse(htmlTemplate)
 	if err != nil {
 		return fmt.Errorf("parsing HTML template: %w", err)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+	if err := os.MkdirAll(outputDirectoryPath, 0o750); err != nil {
 		return fmt.Errorf("creating output directory: %w", err)
 	}
 
-	file, err := os.Create(outputPath)
+	outputRoot, err := os.OpenRoot(outputDirectoryPath)
+	if err != nil {
+		return fmt.Errorf("opening output directory root: %w", err)
+	}
+	defer func() { _ = outputRoot.Close() }()
+
+	file, err := outputRoot.Create(outputFileName)
 	if err != nil {
 		return fmt.Errorf("creating HTML report file: %w", err)
 	}
