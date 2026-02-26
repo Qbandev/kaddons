@@ -52,17 +52,17 @@ export GEMINI_API_KEY=your-key-here
 # Scan all addons (JSON output)
 kaddons
 
-# Table output
-kaddons -o table
+# HTML report output
+kaddons -o html --output-path ./kaddons-report.html
 
 # Check specific addons
-kaddons -a cert-manager,karpenter -o table
+kaddons -a cert-manager,karpenter -o html
 
 # Override cluster version
 kaddons -c 1.30
 
 # Filter by namespace
-kaddons -n kube-system -o table
+kaddons -n kube-system -o html
 ```
 
 ## Flags
@@ -74,7 +74,8 @@ kaddons -n kube-system -o table
 | `--addons` | `-a` | `""` (all matched) | Comma-separated addon name filter |
 | `--key` | `-k` | `""` (falls back to `GEMINI_API_KEY`) | Gemini API key |
 | `--model` | `-m` | `gemini-3-flash-preview` | Gemini model |
-| `--output` | `-o` | `json` | Output format: `json` or `table` |
+| `--output` | `-o` | `json` | Output format: `json` or `html` |
+| `--output-path` | | `./kaddons-report.html` | Output file path when `--output html` is selected |
 
 ## Output
 
@@ -118,17 +119,9 @@ The `compatible` field is a tri-state string:
 
 The `note` field always cites its source URL and includes support-until dates when available.
 
-### Table (`-o table`)
+### HTML report (`-o html`)
 
-```
-┌──────────────────┬──────────────────┬─────────┬──────┬────────────┬────────┬──────────────────────────────────────────────────────────────┐
-│ NAME             │ NAMESPACE        │ VERSION │ K8S  │ COMPATIBLE │ LATEST │ NOTE                                                         │
-├──────────────────┼──────────────────┼─────────┼──────┼────────────┼────────┼──────────────────────────────────────────────────────────────┤
-│ cert-manager     │ cert-manager     │ v1.14.2 │ 1.30 │ yes        │ 1.18   │ The compatibility matrix at cert-manager.io states v1.14 ... │
-├──────────────────┼──────────────────┼─────────┼──────┼────────────┼────────┼──────────────────────────────────────────────────────────────┤
-│ external-secrets │ external-secrets │ v0.14.2 │ 1.30 │ NO         │ 0.13.x │ The compatibility matrix at external-secrets.io states ESO... │
-└──────────────────┴──────────────────┴─────────┴──────┴────────────┴────────┴──────────────────────────────────────────────────────────────┘
-```
+Writes a styled report to `./kaddons-report.html` by default (or to `--output-path` if specified). JSON output remains the default for stdout pipelines.
 
 ## Database validation (development tool)
 

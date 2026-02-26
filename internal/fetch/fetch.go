@@ -165,3 +165,49 @@ func EOLData(ctx context.Context, product string) ([]addon.EOLCycle, error) {
 
 	return cycles, nil
 }
+
+type eolProductsResponse struct {
+	Result []addon.EOLProductCatalogEntry `json:"result"`
+}
+
+// EOLProducts fetches the endoflife.date v1 product catalog for runtime slug resolution.
+func EOLProducts(ctx context.Context) ([]addon.EOLProductCatalogEntry, error) {
+	client := &http.Client{Timeout: 10 * time.Second}
+	const catalogURL = "https://endoflife.date/api/v1/products"
+
+	req, err := http.NewRequestWithContext(ctx, "GET", catalogURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := client.Do(req) // #nosec G704 -- endoflife.date API URL is fixed and not user-controlled
+	if err != nil {
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	if err != nil {
+		return nil, fmt.Errorf("reading response body: %w", err)
+	}
+
+	products, err := parseEOLProducts(body)
+	if err != nil {
+		return nil, err
+	}
+
+	return products, nil
+}
+
+func parseEOLProducts(body []byte) ([]addon.EOLProductCatalogEntry, error) {
+	var parsed eolProductsResponse
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return nil, fmt.Errorf("parsing EOL product catalog: %w", err)
+	}
+	return parsed.Result, nil
+}

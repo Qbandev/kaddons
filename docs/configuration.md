@@ -21,7 +21,8 @@ kaddons [flags]
 | `--addons` | `-a` | `""` | Comma-separated addon name filter. Only matched addons with these names are analyzed. |
 | `--key` | `-k` | `""` | Gemini API key. Overrides `GEMINI_API_KEY` env var. |
 | `--model` | `-m` | `gemini-3-flash-preview` | Gemini model to use for compatibility analysis. |
-| `--output` | `-o` | `json` | Output format. Must be `json` or `table`. |
+| `--output` | `-o` | `json` | Output format. Must be `json` or `html`. |
+| `--output-path` | | `./kaddons-report.html` | Output file path used when `--output html` is selected. |
 | `--version` | | | Print version, commit hash, and build date. |
 
 ## Database validation tool
@@ -77,21 +78,9 @@ Default format (`-o json`). Returns a `CompatibilityReport` object:
 
 The `compatible` field is always a JSON string, never a boolean or null. This is enforced by the `Status` type's custom `UnmarshalJSON` which normalizes LLM output.
 
-### Table
+### HTML
 
-Activated with `-o table`. Renders a Unicode box-drawing table to stdout.
-
-Column mapping:
-
-| Column | JSON field |
-|--------|-----------|
-| NAME | `name` |
-| NAMESPACE | `namespace` |
-| VERSION | `installed_version` |
-| K8S | `k8s_version` (from top-level) |
-| COMPATIBLE | `compatible` (`"true"` → `yes`, `"false"` → `NO`, `"unknown"` → `unknown`) |
-| LATEST | `latest_compatible_version` |
-| NOTE | `note` (truncated to 60 characters) |
+Activated with `-o html`. Writes a styled report file to `./kaddons-report.html` by default, or to the `--output-path` location.
 
 ## Progress output
 
@@ -106,6 +95,8 @@ Enriching 12 addons...
 Analyzing with gemini-3-flash-preview...
 Done: 8 compatible, 2 incompatible, 2 unknown
 ```
+
+The `Done: ...` summary is printed as the final stderr line after output is fully written.
 
 This keeps stdout clean for piping JSON output to other tools:
 

@@ -406,6 +406,58 @@ func TestLookupEOLSlug_CaseInsensitive(t *testing.T) {
 	}
 }
 
+func TestBuildRuntimeEOLSlugLookup(t *testing.T) {
+	products := []EOLProductCatalogEntry{
+		{
+			Name:    "argo-cd",
+			Label:   "Argo CD",
+			Aliases: []string{"argocd", "argo"},
+		},
+		{
+			Name:    "grafana-loki",
+			Label:   "Grafana Loki",
+			Aliases: []string{"loki"},
+		},
+	}
+
+	lookup := BuildRuntimeEOLSlugLookup(products)
+
+	tests := []struct {
+		name string
+		want string
+	}{
+		{name: "argo-cd", want: "argo-cd"},
+		{name: "Argo CD", want: "argo-cd"},
+		{name: "argocd", want: "argo-cd"},
+		{name: "loki", want: "grafana-loki"},
+		{name: "Grafana Loki", want: "grafana-loki"},
+	}
+
+	for _, tt := range tests {
+		got, ok := lookup[normalizeName(tt.name)]
+		if !ok {
+			t.Fatalf("runtime lookup missing key for %q", tt.name)
+		}
+		if got != tt.want {
+			t.Fatalf("runtime lookup for %q = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}
+
+func TestLookupEOLSlugWithRuntime_Fallback(t *testing.T) {
+	runtimeLookup := map[string]string{
+		normalizeName("Argocd"): "argo-cd",
+	}
+
+	if got, ok := LookupEOLSlugWithRuntime("argocd", runtimeLookup); !ok || got != "argo-cd" {
+		t.Fatalf("LookupEOLSlugWithRuntime(argocd) = (%q, %v), want (%q, true)", got, ok, "argo-cd")
+	}
+
+	if got, ok := LookupEOLSlugWithRuntime("istio", runtimeLookup); !ok || got != "istio" {
+		t.Fatalf("LookupEOLSlugWithRuntime(istio) = (%q, %v), want (%q, true)", got, ok, "istio")
+	}
+}
+
 func TestResolveEOLStatus_BoolEOLFalse(t *testing.T) {
 	cycles := []EOLCycle{
 		{Cycle: "1.14", EOL: false},

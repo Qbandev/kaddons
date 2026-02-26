@@ -100,7 +100,7 @@ GitHub URL conversion patterns:
 
 ### EOL data fetching
 
-Addons with a known mapping in `eolProductSlugs` (currently covering Argo CD, Calico, cert-manager, Cilium, Containerd, Contour, Envoy, etcd, Flux, Gatekeeper, Grafana, Harbor, Istio, KEDA, Kuma, Kyverno, Prometheus, Traefik, Redis, and Kubernetes itself) get supplementary lifecycle data from the [endoflife.date](https://endoflife.date) API.
+EOL slug resolution uses a runtime catalog from [endoflife.date v1](https://endoflife.date/docs/api/v1/) (`/api/v1/products`) and matches addon names against product slug, label, and aliases. If runtime lookup fails, a static fallback alias map is used for irregular names.
 
 This provides EOL dates, latest versions, and support status per release cycle.
 
@@ -153,7 +153,7 @@ Uses a URL-centric pipeline that processes unique URLs (not per-addon items), gu
 1. **Harvest** — extracts every URL from all addon fields (`project_url`, `repository`, `compatibility_matrix_url`, `changelog_location`)
 2. **Aggregate** — builds `map[string]*urlTask` keyed by URL. Each task tracks which addons/fields reference it and whether it needs content validation (`needsContent` is true if any addon uses it as `compatibility_matrix_url`)
 3. **Execute** — 10-worker pool iterates unique URLs only. Content URLs use `fetch.CompatibilityPageWithClient`; link-only URLs use HEAD with GET fallback
-4. **Report** — maps results back to addons for two output tables
+4. **Report** — maps results back to addons for link and matrix validation summaries
 
 **Flag semantics:**
 
@@ -186,7 +186,7 @@ cmd/kaddons-validate/
 
 internal/
   addon/
-    addon.go                          Embedded addon DB, 6-pass matching, EOL slug mapping
+    addon.go                          Embedded addon DB, 6-pass matching, EOL slug resolution (runtime+fallback)
     addon_test.go                     Matching, normalization, EOL tests
     k8s_universal_addons.json         668-addon database (embedded via go:embed)
   agent/
@@ -198,7 +198,7 @@ internal/
     fetch.go                          HTTP fetching, GitHub raw URL conversion, EOL data
     fetch_test.go                     GitHub URL conversion tests
   output/
-    output.go                         JSON/table formatting, Status type, JSON extraction
+    output.go                         JSON/HTML formatting, Status type, JSON extraction
     output_test.go                    Status round-trip, JSON backward compat tests
   validate/
     validate.go                       URL reachability + matrix content validation library

@@ -44,7 +44,7 @@ internal/
     fetch.go                          HTTP fetching, GitHub raw URL conversion, EOL data
     fetch_test.go                     GitHub URL conversion tests
   output/
-    output.go                         JSON/table formatting, Status type
+    output.go                         JSON/HTML formatting, Status type
     output_test.go                    Status type, JSON formatting, backward compat tests
   validate/
     validate.go                       URL reachability + matrix content validation library

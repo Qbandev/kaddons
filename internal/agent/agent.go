@@ -24,7 +24,7 @@ type addonWithInfo struct {
 }
 
 // Run executes the Plan-and-Execute pipeline.
-func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addonsFilter, outputFormat string) error {
+func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addonsFilter, outputFormat, outputPath string) error {
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{
 		APIKey:  apiKey,
 		Backend: genai.BackendGeminiAPI,
@@ -104,6 +104,13 @@ func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addo
 
 	// Fetch compatibility pages and EOL data for matched addons
 	fmt.Fprintf(os.Stderr, "Enriching %d addons...\n", len(bestByName))
+	runtimeEOLSlugLookup := make(map[string]string)
+	products, err := fetch.EOLProducts(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: EOL product catalog fetch failed, using static fallback aliases: %v\n", err)
+	} else {
+		runtimeEOLSlugLookup = addon.BuildRuntimeEOLSlugLookup(products)
+	}
 	enriched := make([]addonWithInfo, 0, len(bestByName))
 	fetchedURLs := make(map[string]string) // cache: URL -> content
 	for _, entry := range bestByName {
@@ -122,7 +129,7 @@ func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addo
 				}
 			}
 		}
-		if slug, ok := addon.LookupEOLSlug(info.Name); ok {
+		if slug, ok := addon.LookupEOLSlugWithRuntime(info.Name, runtimeEOLSlugLookup); ok {
 			cycles, err := fetch.EOLData(ctx, slug)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: EOL data fetch failed for %s: %v\n", info.Name, err)
@@ -133,12 +140,16 @@ func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addo
 		enriched = append(enriched, info)
 	}
 	if len(enriched) == 0 {
-		return output.FormatOutput("[]", k8sVersion, outputFormat)
+		if _, err := output.FormatOutput("[]", k8sVersion, outputFormat, outputPath); err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "Done: %d compatible, %d incompatible, %d unknown\n", 0, 0, 0)
+		return nil
 	}
 
 	// Phase 3: LLM analysis — single call with all data pre-collected
 	fmt.Fprintf(os.Stderr, "Analyzing with %s...\n", model)
-	return analyzeCompatibility(ctx, client, model, k8sVersion, enriched, outputFormat)
+	return analyzeCompatibility(ctx, client, model, k8sVersion, enriched, outputFormat, outputPath)
 }
 
 const analysisSystemPrompt = `You are a Kubernetes addon compatibility analyzer. You will receive pre-collected data about addons installed in a cluster, including their compatibility matrix page content when available.
@@ -170,7 +181,7 @@ Notes (source-cited, comprehensive):
 - If eol_data is provided, use it to determine version support status and latest version. Prefer the compatibility page for K8s-specific compatibility; use EOL data as supplementary context for version lifecycle
 - Base your analysis ONLY on the page content and EOL data provided — do not hallucinate compatibility information`
 
-func analyzeCompatibility(ctx context.Context, client *genai.Client, model string, k8sVersion string, addons []addonWithInfo, outputFormat string) error {
+func analyzeCompatibility(ctx context.Context, client *genai.Client, model string, k8sVersion string, addons []addonWithInfo, outputFormat string, outputPath string) error {
 	dataPayload := struct {
 		K8sVersion string          `json:"k8s_version"`
 		Addons     []addonWithInfo `json:"addons"`
@@ -201,23 +212,25 @@ func analyzeCompatibility(ctx context.Context, client *genai.Client, model strin
 	raw := collectTextResponse(resp)
 	extracted := output.ExtractJSON(raw)
 
-	var results []output.AddonCompatibility
-	if err := json.Unmarshal([]byte(extracted), &results); err == nil {
-		var compatible, incompatible, unknown int
-		for _, r := range results {
-			switch r.Compatible {
-			case output.StatusTrue:
-				compatible++
-			case output.StatusFalse:
-				incompatible++
-			default:
-				unknown++
-			}
-		}
-		fmt.Fprintf(os.Stderr, "Done: %d compatible, %d incompatible, %d unknown\n", compatible, incompatible, unknown)
+	results, err := output.FormatOutput(extracted, k8sVersion, outputFormat, outputPath)
+	if err != nil {
+		return err
 	}
 
-	return output.FormatOutput(extracted, k8sVersion, outputFormat)
+	var compatible, incompatible, unknown int
+	for _, result := range results {
+		switch result.Compatible {
+		case output.StatusTrue:
+			compatible++
+		case output.StatusFalse:
+			incompatible++
+		default:
+			unknown++
+		}
+	}
+	fmt.Fprintf(os.Stderr, "Done: %d compatible, %d incompatible, %d unknown\n", compatible, incompatible, unknown)
+
+	return nil
 }
 
 func collectTextResponse(resp *genai.GenerateContentResponse) string {

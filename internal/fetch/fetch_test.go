@@ -89,3 +89,35 @@ func TestGitHubRawURL(t *testing.T) {
 		})
 	}
 }
+
+func TestParseEOLProducts(t *testing.T) {
+	body := []byte(`{
+		"schema_version":"1.2.0",
+		"result":[
+			{"name":"argo-cd","aliases":["argocd"],"label":"Argo CD"},
+			{"name":"keda","aliases":[],"label":"KEDA"}
+		]
+	}`)
+
+	products, err := parseEOLProducts(body)
+	if err != nil {
+		t.Fatalf("parseEOLProducts() error = %v", err)
+	}
+
+	if len(products) != 2 {
+		t.Fatalf("parseEOLProducts() length = %d, want 2", len(products))
+	}
+	if products[0].Name != "argo-cd" {
+		t.Fatalf("products[0].Name = %q, want %q", products[0].Name, "argo-cd")
+	}
+	if len(products[0].Aliases) != 1 || products[0].Aliases[0] != "argocd" {
+		t.Fatalf("products[0].Aliases = %v, want [argocd]", products[0].Aliases)
+	}
+}
+
+func TestParseEOLProducts_InvalidJSON(t *testing.T) {
+	_, err := parseEOLProducts([]byte(`{"result":[`))
+	if err == nil {
+		t.Fatal("parseEOLProducts() expected error for invalid JSON")
+	}
+}
