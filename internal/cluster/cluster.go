@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -163,9 +164,18 @@ func runKubectlCommandWithRetry(ctx context.Context, args ...string) ([]byte, er
 		Multiplier:   2,
 	}
 	return resilience.RetryWithResult(ctx, policy, isRetryableKubectlError, func(callCtx context.Context) ([]byte, error) {
-		output, err := exec.CommandContext(callCtx, "kubectl", args...).Output() // #nosec G204 -- kubectl is a well-known binary, not user-controlled input
+		command := exec.CommandContext(callCtx, "kubectl", args...) // #nosec G204 -- kubectl is a well-known binary, not user-controlled input
+		var stdoutBuffer bytes.Buffer
+		var stderrBuffer bytes.Buffer
+		command.Stdout = &stdoutBuffer
+		command.Stderr = &stderrBuffer
+		err := command.Run()
 		if err == nil {
-			return output, nil
+			return stdoutBuffer.Bytes(), nil
+		}
+		stderrText := strings.TrimSpace(stderrBuffer.String())
+		if stderrText != "" {
+			return nil, fmt.Errorf("%w: %s", err, stderrText)
 		}
 		return nil, err
 	})

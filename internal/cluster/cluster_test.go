@@ -1,6 +1,9 @@
 package cluster
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestStripChartVersion(t *testing.T) {
 	tests := []struct {
@@ -64,5 +67,12 @@ func TestExtractImageTag(t *testing.T) {
 				t.Errorf("extractImageTag(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestIsRetryableKubectlError_FromWrappedStderrMessage(t *testing.T) {
+	err := errors.New("exit status 1: Unable to connect to the server: connection refused")
+	if !isRetryableKubectlError(err) {
+		t.Fatalf("expected wrapped kubectl stderr network error to be retryable")
 	}
 }

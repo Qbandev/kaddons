@@ -123,6 +123,10 @@ func DoHTTPRequestWithRetry(
 	request *http.Request,
 	policy RetryPolicy,
 ) (*http.Response, error) {
+	effectiveAttempts := policy.Attempts
+	if effectiveAttempts <= 0 {
+		effectiveAttempts = 1
+	}
 	attemptCounter := 0
 	return RetryWithResult(ctx, policy, IsRetryableHTTPRequestError, func(callCtx context.Context) (*http.Response, error) {
 		attemptCounter++
@@ -132,7 +136,7 @@ func DoHTTPRequestWithRetry(
 			return nil, err
 		}
 		if IsRetryableHTTPStatus(response.StatusCode) {
-			if attemptCounter >= policy.Attempts {
+			if attemptCounter >= effectiveAttempts {
 				return response, nil
 			}
 			_ = response.Body.Close()

@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/qbandev/kaddons/internal/addon"
 	"github.com/qbandev/kaddons/internal/resilience"
@@ -219,9 +220,26 @@ func normalizeFetchedContent(rawText string, isRaw bool) string {
 	// Keep a larger deterministic fetch budget because downstream pruning enforces
 	// strict per-addon bounds before sending data to Gemini.
 	if len(text) > 120000 {
-		text = text[:120000]
+		text = truncateToValidUTF8Prefix(text, 120000)
 	}
 	return text
+}
+
+func truncateToValidUTF8Prefix(text string, maxBytes int) string {
+	if maxBytes <= 0 || text == "" {
+		return ""
+	}
+	if len(text) <= maxBytes {
+		return text
+	}
+	truncateIndex := maxBytes
+	for truncateIndex > 0 && !utf8.ValidString(text[:truncateIndex]) {
+		truncateIndex--
+	}
+	if truncateIndex <= 0 {
+		return ""
+	}
+	return text[:truncateIndex]
 }
 
 func doRequestWithRetry(ctx context.Context, client *http.Client, request *http.Request) (*http.Response, error) {

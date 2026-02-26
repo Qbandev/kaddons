@@ -3,6 +3,8 @@ package resilience
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 )
@@ -99,6 +101,38 @@ func TestRetryWithResult_ReturnsContextErrorWhenCancelled(t *testing.T) {
 	}
 	if attempts != 1 {
 		t.Fatalf("RetryWithResult() attempts = %d, want 1", attempts)
+	}
+}
+
+func TestDoHTTPRequestWithRetry_NormalizesZeroAttempts(t *testing.T) {
+	requestCount := 0
+	testServer := httptest.NewServer(http.HandlerFunc(func(responseWriter http.ResponseWriter, request *http.Request) {
+		requestCount++
+		responseWriter.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer testServer.Close()
+
+	request, err := http.NewRequestWithContext(context.Background(), http.MethodGet, testServer.URL, nil)
+	if err != nil {
+		t.Fatalf("http.NewRequestWithContext() error = %v", err)
+	}
+
+	response, err := DoHTTPRequestWithRetry(context.Background(), testServer.Client(), request, RetryPolicy{
+		Attempts:     0,
+		InitialDelay: 0,
+		MaxDelay:     0,
+		Multiplier:   2,
+	})
+	if err != nil {
+		t.Fatalf("DoHTTPRequestWithRetry() error = %v", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+
+	if requestCount != 1 {
+		t.Fatalf("DoHTTPRequestWithRetry() requests = %d, want 1 for normalized attempts", requestCount)
+	}
+	if response.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("DoHTTPRequestWithRetry() status = %d, want %d", response.StatusCode, http.StatusServiceUnavailable)
 	}
 }
 

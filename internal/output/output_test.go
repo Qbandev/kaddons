@@ -315,3 +315,14 @@ func TestFormatOutput_HTMLWritesReportFile(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatOutput_InvalidFormatReturnsError(t *testing.T) {
+	raw := `[{"name":"a","namespace":"ns","installed_version":"v1","compatible":"true","note":"ok"}]`
+	_, err := FormatOutput(raw, "1.30", "table", "")
+	if err == nil {
+		t.Fatalf("FormatOutput(table) expected error")
+	}
+	if !strings.Contains(err.Error(), "unsupported output format") {
+		t.Fatalf("FormatOutput(table) error = %v, want unsupported output format", err)
+	}
+}

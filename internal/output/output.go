@@ -60,7 +60,8 @@ func FormatOutput(rawJSON string, k8sVersion string, format string, outputPath s
 		return nil, fmt.Errorf("parsing agent JSON output: %w\nRaw output (first 500 chars):\n%s", err, truncated)
 	}
 
-	if format == "json" {
+	switch format {
+	case "json":
 		report := CompatibilityReport{
 			K8sVersion: k8sVersion,
 			Addons:     addons,
@@ -71,13 +72,15 @@ func FormatOutput(rawJSON string, k8sVersion string, format string, outputPath s
 		}
 		fmt.Println(string(out))
 		return addons, nil
+	case "html":
+		if err := writeHTMLReport(addons, k8sVersion, outputPath); err != nil {
+			return nil, err
+		}
+		fmt.Fprintf(os.Stderr, "HTML report written to %s\n", outputPath)
+		return addons, nil
+	default:
+		return nil, fmt.Errorf("unsupported output format %q (supported: json, html)", format)
 	}
-
-	if err := writeHTMLReport(addons, k8sVersion, outputPath); err != nil {
-		return nil, err
-	}
-	fmt.Fprintf(os.Stderr, "HTML report written to %s\n", outputPath)
-	return addons, nil
 }
 
 type htmlReportRow struct {

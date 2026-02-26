@@ -3,6 +3,7 @@ package fetch
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestGitHubRawURL(t *testing.T) {
@@ -145,5 +146,16 @@ func TestNormalizeFetchedContent_PreservesTableLikeLines(t *testing.T) {
 	}
 	if !strings.Contains(got, "v1.31") {
 		t.Fatalf("normalizeFetchedContent() missing table cell content: %q", got)
+	}
+}
+
+func TestNormalizeFetchedContent_UTF8SafeTruncation(t *testing.T) {
+	large := strings.Repeat("😀", 40000) // 160k bytes
+	got := normalizeFetchedContent(large, true)
+	if len(got) > 120000 {
+		t.Fatalf("normalizeFetchedContent() len = %d, want <= 120000", len(got))
+	}
+	if !utf8.ValidString(got) {
+		t.Fatalf("normalizeFetchedContent() produced invalid UTF-8")
 	}
 }
