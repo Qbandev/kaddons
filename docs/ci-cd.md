@@ -21,7 +21,7 @@ Runs on every push to `main` and every pull request targeting `main`.
 
 | Step | Command | Purpose |
 |------|---------|---------|
-| Matrix validation | `go run ./cmd/kaddons-validate --matrix` | Ensures compatibility matrix URLs still contain Kubernetes version data |
+| Matrix validation (advisory) | `go run ./cmd/kaddons-validate --matrix` | Reports compatibility matrix coverage without blocking CI while the dataset is being cleaned |
 
 **Security job:**
 
