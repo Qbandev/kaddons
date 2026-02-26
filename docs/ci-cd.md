@@ -59,7 +59,8 @@ This catches URL rot in the addon database — projects move, rename repositorie
 Triggered on each push to `main` (including merged PRs).
 
 1. Uses [release-please](https://github.com/googleapis/release-please-action) to determine semantic version bumps from commit history
-2. Creates new version tags automatically when a releasable change is detected
+2. Creates or updates an automated release PR with proposed version and changelog updates
+3. Creates the final tag/release when the release PR is merged
 
 ### Publish release artifacts (`release.yml`)
 
@@ -98,11 +99,15 @@ Archive naming: `kaddons_{version}_{os}_{arch}.tar.gz`
 
 ### Creating a release
 
-Merge pull requests into `main`. The release workflow will:
+Normal development pull requests are merged into `main` as usual. Release automation then:
 
-1. infer the next version from commits
-2. create the version tag automatically
-3. publish release artifacts and Homebrew formula updates
+1. creates or updates an automated release PR based on merged commits
+2. proposes the next version and changelog in that release PR
+
+When the release PR is merged, the publish workflow:
+
+1. creates the corresponding version tag automatically
+2. publishes release artifacts and Homebrew formula updates
 
 Manual tag pushes (`git tag vX.Y.Z && git push origin vX.Y.Z`) are still supported as a fallback.
 

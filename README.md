@@ -48,7 +48,7 @@ All three installation methods above are validated in CI, including a live Homeb
 
 ## Releases
 
-Releases are automated from merges to `main` using release-please. When releasable changes are detected, a new version tag is created and the publish workflow builds artifacts and updates the Homebrew tap.
+Releases are automated from merges to `main` using release-please. When releasable changes are detected, release-please opens or updates a release PR; once that release PR is merged, a new version tag is created and the publish workflow builds artifacts and updates the Homebrew tap.
 
 ## Quick start
 
