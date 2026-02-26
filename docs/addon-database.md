@@ -12,8 +12,7 @@ The addon database is an embedded JSON file (`internal/addon/k8s_universal_addon
       "project_url": "https://cert-manager.io",
       "repository": "https://github.com/cert-manager/cert-manager",
       "compatibility_matrix_url": "https://cert-manager.io/docs/releases/",
-      "changelog_location": "https://github.com/cert-manager/cert-manager/releases",
-      "upgrade_path_type": "Helm-driven"
+      "changelog_location": "https://github.com/cert-manager/cert-manager/releases"
     }
   ],
   "metadata": {}
@@ -29,16 +28,6 @@ The addon database is an embedded JSON file (`internal/addon/k8s_universal_addon
 | `repository` | Yes | Source code repository |
 | `compatibility_matrix_url` | Yes | Page containing K8s version compatibility data |
 | `changelog_location` | Yes | Release notes or changelog URL |
-| `upgrade_path_type` | Yes | How the addon is typically upgraded |
-
-### Upgrade path types
-
-| Type | Description |
-|------|-------------|
-| `Helm-driven` | Upgraded via Helm chart releases |
-| `Operator-managed` | Upgraded by an operator (CRD-based lifecycle) |
-| `Manual-manifest` | Applied via raw YAML manifests |
-| `Platform-managed` | Managed by the cloud provider (EKS, GKE addons) |
 
 ## Matching algorithm
 
@@ -81,7 +70,7 @@ The conversion is transparent — the database stores the human-readable GitHub 
 To add an addon to the database:
 
 1. Edit `internal/addon/k8s_universal_addons.json` and add an entry to the `addons` array
-2. Fill in all six fields — the most important is `compatibility_matrix_url`, which should point to a page with actual K8s version compatibility data (not a generic README)
+2. Fill in all five fields — the most important is `compatibility_matrix_url`, which should point to a page with actual K8s version compatibility data (not a generic README)
 3. Prefer these URL sources in order:
    - Dedicated compatibility or prerequisites page in official docs
    - Helm chart README with K8s version requirements

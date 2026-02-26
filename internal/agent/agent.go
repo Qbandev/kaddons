@@ -37,6 +37,7 @@ func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addo
 	if err != nil {
 		return fmt.Errorf("loading addon database: %w", err)
 	}
+	addonMatcher := addon.NewMatcher(addonDB)
 
 	// Phase 1: Deterministic data collection (no LLM involved)
 	k8sVersion := k8sVersionOverride
@@ -79,7 +80,7 @@ func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addo
 	}
 	bestByName := make(map[string]enrichedEntry)
 	for _, a := range detected {
-		matches := addon.LookupAddon(a.Name, addonDB)
+		matches := addonMatcher.Match(a.Name)
 		if len(matches) == 0 {
 			continue
 		}

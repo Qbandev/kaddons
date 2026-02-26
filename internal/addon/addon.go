@@ -18,7 +18,6 @@ type Addon struct {
 	Repository             string `json:"repository"`
 	CompatibilityMatrixURL string `json:"compatibility_matrix_url"`
 	ChangelogLocation      string `json:"changelog_location"`
-	UpgradePathType        string `json:"upgrade_path_type"`
 }
 
 type addonsFile struct {
@@ -154,8 +153,39 @@ func LookupEOLSlug(addonName string) (string, bool) {
 	return slug, ok
 }
 
-// LookupAddon matches a detected workload name against the addon database.
-func LookupAddon(name string, addons []Addon) []Addon {
+type addonEntry struct {
+	addon     Addon
+	lowerName string
+}
+
+// Matcher precomputes normalized addon names for faster repeated lookups.
+type Matcher struct {
+	entries      []addonEntry
+	firstByLower map[string]Addon
+}
+
+// NewMatcher builds a reusable matcher for repeated addon name lookups.
+func NewMatcher(addons []Addon) *Matcher {
+	entries := make([]addonEntry, len(addons))
+	firstByLower := make(map[string]Addon, len(addons))
+	for i, addon := range addons {
+		lowerName := strings.ToLower(addon.Name)
+		entries[i] = addonEntry{
+			addon:     addon,
+			lowerName: lowerName,
+		}
+		if _, exists := firstByLower[lowerName]; !exists {
+			firstByLower[lowerName] = addon
+		}
+	}
+	return &Matcher{
+		entries:      entries,
+		firstByLower: firstByLower,
+	}
+}
+
+// Match resolves a detected addon name to known addon definitions.
+func (matcher *Matcher) Match(name string) []Addon {
 	lower := strings.ToLower(name)
 
 	// Pass 0: Alias resolution — only for truly irregular names
@@ -164,29 +194,23 @@ func LookupAddon(name string, addons []Addon) []Addon {
 	}
 
 	// Pass 1: Exact match (case-insensitive on raw name)
-	for _, a := range addons {
-		if strings.ToLower(a.Name) == lower {
-			return []Addon{a}
-		}
+	if exact, ok := matcher.firstByLower[lower]; ok {
+		return []Addon{exact}
 	}
 
 	// Pass 2: Normalize and try exact match
 	normalized := normalizeName(name)
 	if normalized != lower {
-		for _, a := range addons {
-			if strings.ToLower(a.Name) == normalized {
-				return []Addon{a}
-			}
+		if exact, ok := matcher.firstByLower[normalized]; ok {
+			return []Addon{exact}
 		}
 	}
 
 	// Pass 3: Strip role suffix from normalized name and try exact match
 	core, stripped := stripRoleSuffix(normalized)
 	if stripped {
-		for _, a := range addons {
-			if strings.ToLower(a.Name) == core {
-				return []Addon{a}
-			}
+		if exact, ok := matcher.firstByLower[core]; ok {
+			return []Addon{exact}
 		}
 	}
 
@@ -196,12 +220,11 @@ func LookupAddon(name string, addons []Addon) []Addon {
 	}
 
 	// Pass 4: Forward prefix — DB name starts with detected/normalized name + separator
-	var matches []Addon
-	for _, candidates := range []string{lower, normalized, core} {
-		for _, a := range addons {
-			dbLower := strings.ToLower(a.Name)
-			if strings.HasPrefix(dbLower, candidates+" ") || strings.HasPrefix(dbLower, candidates+"-") {
-				matches = append(matches, a)
+	for _, candidate := range []string{lower, normalized, core} {
+		var matches []Addon
+		for _, entry := range matcher.entries {
+			if strings.HasPrefix(entry.lowerName, candidate+" ") || strings.HasPrefix(entry.lowerName, candidate+"-") {
+				matches = append(matches, entry.addon)
 			}
 		}
 		if len(matches) > 0 {
@@ -210,11 +233,11 @@ func LookupAddon(name string, addons []Addon) []Addon {
 	}
 
 	// Pass 5: Reverse prefix — detected/normalized name starts with DB name + separator
-	for _, a := range addons {
-		dbLower := strings.ToLower(a.Name)
-		if len(dbLower) >= 4 {
-			if strings.HasPrefix(normalized, dbLower+" ") || strings.HasPrefix(normalized, dbLower+"-") {
-				matches = append(matches, a)
+	var matches []Addon
+	for _, entry := range matcher.entries {
+		if len(entry.lowerName) >= 4 {
+			if strings.HasPrefix(normalized, entry.lowerName+" ") || strings.HasPrefix(normalized, entry.lowerName+"-") {
+				matches = append(matches, entry.addon)
 			}
 		}
 	}
@@ -224,14 +247,18 @@ func LookupAddon(name string, addons []Addon) []Addon {
 
 	// Pass 6: Word-subset match — all words of the core name appear in a DB name
 	if len(strings.Fields(core)) >= 2 {
-		for _, a := range addons {
-			dbLower := strings.ToLower(a.Name)
-			if wordSubsetMatch(core, dbLower) {
-				matches = append(matches, a)
+		for _, entry := range matcher.entries {
+			if wordSubsetMatch(core, entry.lowerName) {
+				matches = append(matches, entry.addon)
 			}
 		}
 	}
 	return matches
+}
+
+// LookupAddon matches a detected workload name against the addon database.
+func LookupAddon(name string, addons []Addon) []Addon {
+	return NewMatcher(addons).Match(name)
 }
 
 // ResolveEOLStatus matches an installed version against EOL cycles and returns
