@@ -21,7 +21,7 @@ Runs on every push to `main` and every pull request targeting `main`.
 
 | Step | Command | Purpose |
 |------|---------|---------|
-| Matrix validation (advisory) | `go run ./cmd/kaddons-validate --matrix` | Reports compatibility matrix coverage without blocking CI while the dataset is being cleaned |
+| Matrix validation (advisory) | `go run ./cmd/kaddons-validate --matrix` | Reports live compatibility matrix coverage without blocking CI |
 
 **Security job:**
 
@@ -136,9 +136,11 @@ govulncheck ./...
 gosec ./...
 
 # Validate addon DB (no cluster needed)
-make validate                              # both checks
-go run ./cmd/kaddons-validate --links      # links only
-go run ./cmd/kaddons-validate --matrix     # matrix only
+make validate                               # deterministic stored-data validation (no network)
+make validate-live                          # live checks (links + matrix content)
+go run ./cmd/kaddons-validate --stored-only # stored-data validation only
+go run ./cmd/kaddons-validate --links       # links only
+go run ./cmd/kaddons-validate --matrix      # matrix only
 
 # Module tidy check
 go mod tidy && git diff --exit-code go.mod go.sum

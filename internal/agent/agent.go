@@ -7,6 +7,7 @@ import (
 	"os"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -30,14 +31,6 @@ type addonWithInfo struct {
 
 // Run executes the Plan-and-Execute pipeline.
 func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addonsFilter, outputFormat, outputPath string) error {
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
-		APIKey:  apiKey,
-		Backend: genai.BackendGeminiAPI,
-	})
-	if err != nil {
-		return fmt.Errorf("creating Gemini client: %w", err)
-	}
-
 	addonDB, err := addon.LoadAddons()
 	if err != nil {
 		return fmt.Errorf("loading addon database: %w", err)
@@ -114,23 +107,42 @@ func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addo
 
 	fmt.Fprintf(os.Stderr, "Matched %d known addons\n", len(bestByName))
 
-	// Fetch compatibility pages and EOL data for matched addons
-	fmt.Fprintf(os.Stderr, "Enriching %d addons...\n", len(bestByName))
-	runtimeEOLSlugLookup := make(map[string]string)
-	products, err := fetch.EOLProducts(ctx)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: EOL product catalog fetch failed, using static fallback aliases: %v\n", err)
-	} else {
-		runtimeEOLSlugLookup = addon.BuildRuntimeEOLSlugLookup(products)
-	}
-	enriched := make([]addonWithInfo, 0, len(bestByName))
-	fetchedURLs := make(map[string]string) // cache: URL -> content
+	// Phase 2b: Resolve stored-data addons deterministically (no fetch, no LLM)
 	orderedAddonNames := make([]string, 0, len(bestByName))
 	for addonName := range bestByName {
 		orderedAddonNames = append(orderedAddonNames, addonName)
 	}
 	sort.Strings(orderedAddonNames)
+
+	var storedResults []output.AddonCompatibility
+	var runtimeAddons []string // addon names that need runtime resolution
+
 	for _, addonName := range orderedAddonNames {
+		entry := bestByName[addonName]
+		info := entry.info
+		if info.DBMatch != nil && info.DBMatch.HasStoredCompatibility() {
+			result := resolveFromStoredData(info, k8sVersion)
+			storedResults = append(storedResults, result)
+			fmt.Fprintf(os.Stderr, "Resolved %s from stored data -> %s\n", info.Name, result.Compatible)
+		} else {
+			runtimeAddons = append(runtimeAddons, addonName)
+		}
+	}
+
+	// Fetch compatibility pages and EOL data for addons without stored data
+	fmt.Fprintf(os.Stderr, "Enriching %d addons (runtime)...\n", len(runtimeAddons))
+	runtimeEOLSlugLookup := make(map[string]string)
+	if len(runtimeAddons) > 0 {
+		products, err := fetch.EOLProducts(ctx)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: EOL product catalog fetch failed, using static fallback aliases: %v\n", err)
+		} else {
+			runtimeEOLSlugLookup = addon.BuildRuntimeEOLSlugLookup(products)
+		}
+	}
+	enriched := make([]addonWithInfo, 0, len(runtimeAddons))
+	fetchedURLs := make(map[string]string) // cache: URL -> content
+	for _, addonName := range runtimeAddons {
 		entry := bestByName[addonName]
 		info := entry.info
 		if info.DBMatch.CompatibilityMatrixURL != "" {
@@ -157,7 +169,8 @@ func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addo
 		}
 		enriched = append(enriched, info)
 	}
-	if len(enriched) == 0 {
+
+	if len(enriched) == 0 && len(storedResults) == 0 {
 		if _, err := output.FormatOutput("[]", k8sVersion, outputFormat, outputPath); err != nil {
 			return err
 		}
@@ -165,9 +178,550 @@ func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addo
 		return nil
 	}
 
-	// Phase 3: LLM analysis — single call with all data pre-collected
-	fmt.Fprintf(os.Stderr, "Analyzing with %s...\n", model)
-	return analyzeCompatibility(ctx, client, model, k8sVersion, enriched, outputFormat, outputPath)
+	// Phase 3: LLM analysis — only for runtime addons
+	var client *genai.Client
+	if len(enriched) > 0 {
+		if strings.TrimSpace(apiKey) == "" {
+			return fmt.Errorf("gemini API key is required: set GEMINI_API_KEY env var or use --key flag")
+		}
+		client, err = genai.NewClient(ctx, &genai.ClientConfig{
+			APIKey:  apiKey,
+			Backend: genai.BackendGeminiAPI,
+		})
+		if err != nil {
+			return fmt.Errorf("creating Gemini client: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "Analyzing with %s...\n", model)
+	}
+	return analyzeCompatibility(ctx, client, model, k8sVersion, enriched, storedResults, outputFormat, outputPath)
+}
+
+// resolveFromStoredData produces a deterministic compatibility verdict from
+// the addon's pre-populated KubernetesCompatibility or KubernetesMinVersion.
+func resolveFromStoredData(info addonWithInfo, k8sVersion string) output.AddonCompatibility {
+	result := output.AddonCompatibility{
+		Name:             info.Name,
+		Namespace:        info.Namespace,
+		InstalledVersion: info.Version,
+		DataSource:       output.DataSourceStored,
+	}
+
+	k8sMajorMinor := normalizeK8sVersion(k8sVersion)
+	finalizeResult := func() output.AddonCompatibility {
+		if info.DBMatch != nil {
+			result.Note = appendSourceReference(result.Note, info.DBMatch.CompatibilityMatrixURL)
+		}
+		return result
+	}
+
+	// Full matrix: addon-version → []k8s-versions
+	if len(info.DBMatch.KubernetesCompatibility) > 0 {
+		installedNorm := strings.TrimPrefix(info.Version, "v")
+		matchedKey, matchedK8sVersions, matched := findDirectMatrixCompatibilityMatch(
+			info.DBMatch.KubernetesCompatibility,
+			installedNorm,
+		)
+
+		if !matched {
+			// Some matrices are threshold-style (e.g. ">= 1.0.5" or "1.2.x"),
+			// where each key means "this addon version or newer".
+			thresholdKey, _, thresholdFound := findThresholdCompatibilityMatch(
+				info.DBMatch.KubernetesCompatibility,
+				installedNorm,
+				k8sMajorMinor,
+			)
+			if thresholdFound {
+				result.Compatible = output.StatusTrue
+				result.Note = fmt.Sprintf(
+					"Addon version %s satisfies threshold %s for K8s %s per stored matrix",
+					info.Version,
+					thresholdKey,
+					k8sMajorMinor,
+				)
+				result.LatestCompatibleVersion = findLatestCompatibleVersion(info.DBMatch.KubernetesCompatibility, k8sMajorMinor)
+				return finalizeResult()
+			}
+
+			// Installed version not in matrix — fall back to min/max version if available.
+			if resolveFromMinMaxVersion(info.DBMatch, k8sMajorMinor, &result) {
+				result.Note = fmt.Sprintf("Installed version %s not found in stored matrix; %s", info.Version, result.Note)
+				return finalizeResult()
+			}
+
+			result.Compatible = output.StatusUnknown
+			latestKey := findLatestCompatibleVersion(info.DBMatch.KubernetesCompatibility, k8sMajorMinor)
+			if latestKey != "" {
+				result.LatestCompatibleVersion = latestKey
+				result.Note = fmt.Sprintf("Installed version %s not found in stored matrix. Latest version supporting K8s %s: %s", info.Version, k8sMajorMinor, latestKey)
+			} else {
+				result.Note = fmt.Sprintf("Installed version %s not found in stored compatibility matrix", info.Version)
+			}
+			return finalizeResult()
+		}
+
+		// Check if target K8s version is in the supported list
+		for _, v := range matchedK8sVersions {
+			if normalizeK8sVersion(v) == k8sMajorMinor {
+				result.Compatible = output.StatusTrue
+				result.Note = fmt.Sprintf("Addon version %s supports K8s %s per stored matrix", matchedKey, k8sMajorMinor)
+				return finalizeResult()
+			}
+		}
+
+		result.Compatible = output.StatusFalse
+		latestKey := findLatestCompatibleVersion(info.DBMatch.KubernetesCompatibility, k8sMajorMinor)
+		if latestKey != "" {
+			result.LatestCompatibleVersion = latestKey
+		}
+		result.Note = fmt.Sprintf("Addon version %s does not support K8s %s per stored matrix (supports: %s)", matchedKey, k8sMajorMinor, strings.Join(matchedK8sVersions, ", "))
+		return finalizeResult()
+	}
+
+	// Min/max version check (no full matrix available)
+	if resolveFromMinMaxVersion(info.DBMatch, k8sMajorMinor, &result) {
+		return finalizeResult()
+	}
+
+	result.Compatible = output.StatusUnknown
+	result.Note = "No stored compatibility data available"
+	return finalizeResult()
+}
+
+func matrixKeyMatchesInstalledVersion(matrixKey string, installedVersion string) bool {
+	keyNorm := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(matrixKey)), "v")
+	installedNorm := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(installedVersion), "v"))
+	if keyNorm == "" {
+		return false
+	}
+
+	// Skip non-semver keys that can never match a cluster-reported version.
+	if isNonSemverKey(keyNorm) {
+		return false
+	}
+
+	// Version range: "2.0.0-2.1.3" or "0.6.0-0.12.0"
+	if lo, hi, ok := parseVersionRangeKey(keyNorm); ok {
+		return versionInRange(installedNorm, lo, hi)
+	}
+
+	// Exact, prefix, or pre-release match: "1.15" matches "1.15", "1.15.0", "1.15.0-rc1"
+	if keyNorm == installedNorm || strings.HasPrefix(installedNorm, keyNorm+".") || strings.HasPrefix(installedNorm, keyNorm+"-") {
+		return true
+	}
+
+	// Wildcard: "1.9.x" matches "1.9", "1.9.0", "1.9.5"
+	if strings.HasSuffix(keyNorm, ".x") {
+		keyBase := strings.TrimSuffix(keyNorm, ".x")
+		if installedNorm == keyBase || strings.HasPrefix(installedNorm, keyBase+".") {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isNonSemverKey returns true for keys that don't start with a digit, meaning
+// they represent branch names (master, HEAD, main, latest) or non-version
+// identifiers (cis-1.6, ≥0.18.x). These are kept in the database for
+// reference but skipped during version matching.
+func isNonSemverKey(key string) bool {
+	if key == "" {
+		return true
+	}
+	first := key[0]
+	return first < '0' || first > '9'
+}
+
+// parseVersionRangeKey parses keys like "2.0.0-v2.1.3" into a lo/hi pair.
+// Returns false if the key is not a version range. Both sides are stripped
+// of any "v" prefix.
+func parseVersionRangeKey(key string) (lo string, hi string, ok bool) {
+	dashIdx := strings.Index(key, "-")
+	if dashIdx <= 0 || dashIdx >= len(key)-1 {
+		return "", "", false
+	}
+
+	left := strings.TrimPrefix(key[:dashIdx], "v")
+	right := strings.TrimPrefix(key[dashIdx+1:], "v")
+
+	if left == "" || right == "" {
+		return "", "", false
+	}
+	if left[0] < '0' || left[0] > '9' || right[0] < '0' || right[0] > '9' {
+		return "", "", false
+	}
+	if !strings.Contains(left, ".") || !strings.Contains(right, ".") {
+		return "", "", false
+	}
+
+	return left, right, true
+}
+
+// versionInRange checks if installedVersion is between lo and hi (inclusive),
+// using numeric segment comparison.
+func versionInRange(installed string, lo string, hi string) bool {
+	instParts, instOK := parseAddonVersionFloor(installed)
+	loParts, loOK := parseAddonVersionFloor(lo)
+	hiParts, hiOK := parseAddonVersionFloor(hi)
+	if !instOK || !loOK || !hiOK {
+		return false
+	}
+	return compareAddonVersionFloors(instParts, loParts) >= 0 &&
+		compareAddonVersionFloors(instParts, hiParts) <= 0
+}
+
+// sortedMatrixKeys returns the keys of a compatibility matrix in sorted order
+// to ensure deterministic iteration.
+func sortedMatrixKeys(matrix map[string][]string) []string {
+	keys := make([]string, 0, len(matrix))
+	for key := range matrix {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func findDirectMatrixCompatibilityMatch(matrix map[string][]string, installedVersion string) (string, []string, bool) {
+	installedNorm := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(installedVersion), "v"))
+	if installedNorm == "" {
+		return "", nil, false
+	}
+
+	bestKey := ""
+	bestScore := -1
+	for _, key := range sortedMatrixKeys(matrix) {
+		matchScore, matched := scoreMatrixKeyMatch(key, installedNorm)
+		if !matched {
+			continue
+		}
+		if matchScore > bestScore {
+			bestScore = matchScore
+			bestKey = key
+		}
+	}
+	if bestKey == "" {
+		return "", nil, false
+	}
+	return bestKey, matrix[bestKey], true
+}
+
+func scoreMatrixKeyMatch(matrixKey string, installedVersion string) (int, bool) {
+	keyNorm := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(matrixKey)), "v")
+	if keyNorm == "" {
+		return 0, false
+	}
+
+	switch {
+	case keyNorm == installedVersion:
+		return 300 + len(keyNorm), true
+	case strings.HasPrefix(installedVersion, keyNorm+"."),
+		strings.HasPrefix(installedVersion, keyNorm+"-"):
+		return 200 + len(keyNorm), true
+	case strings.HasSuffix(keyNorm, ".x"):
+		keyBase := strings.TrimSuffix(keyNorm, ".x")
+		if installedVersion == keyBase || strings.HasPrefix(installedVersion, keyBase+".") {
+			return 100 + len(keyNorm), true
+		}
+	case isPatchLevelKeyCompatible(keyNorm, installedVersion):
+		// Matrix tables often list one patch per compatible minor line.
+		return 150 + len(keyNorm), true
+	}
+	if matrixKeyMatchesInstalledVersion(matrixKey, installedVersion) {
+		// Keep explicit/prefix/wildcard precedence above, but still allow
+		// deterministic selection for supported advanced key forms (e.g. ranges).
+		return 50 + len(keyNorm), true
+	}
+	return 0, false
+}
+
+// resolveFromMinMaxVersion checks kubernetes_min_version and kubernetes_max_version
+// to produce a compatibility verdict. Returns true if a verdict was produced.
+func resolveFromMinMaxVersion(a *addon.Addon, k8sMajorMinor string, result *output.AddonCompatibility) bool {
+	if a.KubernetesMinVersion == "" && a.KubernetesMaxVersion == "" {
+		return false
+	}
+
+	aboveMin := true
+	belowMax := true
+
+	if a.KubernetesMinVersion != "" {
+		aboveMin = compareK8sVersions(k8sMajorMinor, a.KubernetesMinVersion) >= 0
+	}
+	if a.KubernetesMaxVersion != "" {
+		belowMax = compareK8sVersions(k8sMajorMinor, a.KubernetesMaxVersion) <= 0
+	}
+
+	if aboveMin && belowMax {
+		result.Compatible = output.StatusTrue
+		switch {
+		case a.KubernetesMinVersion != "" && a.KubernetesMaxVersion != "":
+			result.Note = fmt.Sprintf("K8s %s is within supported range %s–%s", k8sMajorMinor, a.KubernetesMinVersion, a.KubernetesMaxVersion)
+		case a.KubernetesMinVersion != "":
+			result.Note = fmt.Sprintf("K8s %s >= minimum required %s", k8sMajorMinor, a.KubernetesMinVersion)
+		default:
+			result.Note = fmt.Sprintf("K8s %s <= maximum supported %s", k8sMajorMinor, a.KubernetesMaxVersion)
+		}
+	} else {
+		result.Compatible = output.StatusFalse
+		switch {
+		case !aboveMin:
+			result.Note = fmt.Sprintf("K8s %s < minimum required %s", k8sMajorMinor, a.KubernetesMinVersion)
+		default:
+			result.Note = fmt.Sprintf("K8s %s > maximum supported %s", k8sMajorMinor, a.KubernetesMaxVersion)
+		}
+	}
+	return true
+}
+
+func findThresholdCompatibilityMatch(matrix map[string][]string, installedVersion string, targetK8sVersion string) (string, []string, bool) {
+	if !looksLikeThresholdStyleMatrix(matrix) {
+		return "", nil, false
+	}
+
+	installedParts, installedOK := parseAddonVersionFloor(installedVersion)
+	if !installedOK {
+		return "", nil, false
+	}
+
+	bestKey := ""
+	var bestVersions []string
+	var bestParts []int
+	for key, versions := range matrix {
+		if !supportsK8sVersion(versions, targetK8sVersion) {
+			continue
+		}
+		keyParts, keyOK := parseAddonVersionFloor(key)
+		if !keyOK {
+			continue
+		}
+		if compareAddonVersionFloors(installedParts, keyParts) < 0 {
+			continue
+		}
+		if bestParts == nil || compareAddonVersionFloors(keyParts, bestParts) > 0 {
+			bestKey = key
+			bestVersions = versions
+			bestParts = keyParts
+		}
+	}
+	if bestKey == "" {
+		return "", nil, false
+	}
+	return bestKey, bestVersions, true
+}
+
+func looksLikeThresholdStyleMatrix(matrix map[string][]string) bool {
+	for key := range matrix {
+		normalizedKey := strings.ToLower(strings.TrimSpace(key))
+		if strings.HasPrefix(normalizedKey, ">=") || strings.Contains(normalizedKey, ".x") || strings.HasSuffix(normalizedKey, "+") {
+			return true
+		}
+	}
+	return false
+}
+
+func supportsK8sVersion(supportedVersions []string, targetK8sVersion string) bool {
+	for _, v := range supportedVersions {
+		if normalizeK8sVersion(v) == targetK8sVersion {
+			return true
+		}
+	}
+	return false
+}
+
+func parseAddonVersionFloor(rawVersion string) ([]int, bool) {
+	version := strings.ToLower(strings.TrimSpace(rawVersion))
+	version = strings.TrimPrefix(version, ">=")
+	version = strings.TrimPrefix(version, "v")
+	version = strings.TrimSpace(version)
+	version = strings.TrimSuffix(version, ".x")
+	version = strings.TrimSuffix(version, "+")
+	if version == "" {
+		return nil, false
+	}
+
+	segments := strings.Split(version, ".")
+	parts := make([]int, 0, len(segments))
+	for _, segment := range segments {
+		if segment == "" {
+			break
+		}
+		digitEnd := 0
+		for digitEnd < len(segment) && segment[digitEnd] >= '0' && segment[digitEnd] <= '9' {
+			digitEnd++
+		}
+		if digitEnd == 0 {
+			break
+		}
+		numericValue, err := strconv.Atoi(segment[:digitEnd])
+		if err != nil {
+			return nil, false
+		}
+		parts = append(parts, numericValue)
+	}
+	if len(parts) == 0 {
+		return nil, false
+	}
+	return parts, true
+}
+
+func compareAddonVersionFloors(a []int, b []int) int {
+	maxLen := len(a)
+	if len(b) > maxLen {
+		maxLen = len(b)
+	}
+	for i := 0; i < maxLen; i++ {
+		aPart := 0
+		if i < len(a) {
+			aPart = a[i]
+		}
+		bPart := 0
+		if i < len(b) {
+			bPart = b[i]
+		}
+		if aPart < bPart {
+			return -1
+		}
+		if aPart > bPart {
+			return 1
+		}
+	}
+	return 0
+}
+
+// normalizeK8sVersion extracts the major.minor portion from a K8s version string.
+func normalizeK8sVersion(version string) string {
+	v := strings.TrimPrefix(version, "v")
+	parts := strings.SplitN(v, ".", 3)
+	if len(parts) >= 2 {
+		return parts[0] + "." + parts[1]
+	}
+	return v
+}
+
+// compareK8sVersions compares two major.minor version strings.
+// Returns -1 if a < b, 0 if a == b, 1 if a > b.
+func compareK8sVersions(a, b string) int {
+	aParts := strings.SplitN(a, ".", 2)
+	bParts := strings.SplitN(b, ".", 2)
+	if len(aParts) < 2 || len(bParts) < 2 {
+		aLeading := parseLeadingInt(a)
+		bLeading := parseLeadingInt(b)
+		if aLeading < bLeading {
+			return -1
+		}
+		if aLeading > bLeading {
+			return 1
+		}
+		return 0
+	}
+	aMajor := parseLeadingInt(aParts[0])
+	bMajor := parseLeadingInt(bParts[0])
+	if aMajor != bMajor {
+		if aMajor < bMajor {
+			return -1
+		}
+		return 1
+	}
+	aMin := parseLeadingInt(aParts[1])
+	bMin := parseLeadingInt(bParts[1])
+	if aMin < bMin {
+		return -1
+	}
+	if aMin > bMin {
+		return 1
+	}
+	return 0
+}
+
+func parseLeadingInt(value string) int {
+	numericValue := 0
+	for _, char := range value {
+		if char < '0' || char > '9' {
+			break
+		}
+		numericValue = numericValue*10 + int(char-'0')
+	}
+	return numericValue
+}
+
+func appendSourceReference(note string, sourceURL string) string {
+	if sourceURL == "" || strings.Contains(note, sourceURL) {
+		return note
+	}
+	if note == "" {
+		return fmt.Sprintf("Source: %s", sourceURL)
+	}
+	return fmt.Sprintf("%s Source: %s", note, sourceURL)
+}
+
+func isPatchLevelKeyCompatible(matrixKey string, installedVersion string) bool {
+	if !isSimpleSemverTriplet(matrixKey) {
+		return false
+	}
+	matrixParts, matrixOK := parseAddonVersionFloor(matrixKey)
+	installedParts, installedOK := parseAddonVersionFloor(installedVersion)
+	if !matrixOK || !installedOK || len(matrixParts) < 3 || len(installedParts) < 3 {
+		return false
+	}
+	if matrixParts[0] != installedParts[0] || matrixParts[1] != installedParts[1] {
+		return false
+	}
+	return compareAddonVersionFloors(installedParts, matrixParts) >= 0
+}
+
+func isSimpleSemverTriplet(version string) bool {
+	dotCount := 0
+	for _, character := range version {
+		if character == '.' {
+			dotCount++
+			continue
+		}
+		if character < '0' || character > '9' {
+			return false
+		}
+	}
+	return dotCount == 2
+}
+
+// findLatestCompatibleVersion finds the latest addon version in the matrix
+// that supports the given K8s version.
+func findLatestCompatibleVersion(matrix map[string][]string, k8sVersion string) string {
+	var latest string
+	var latestParts []int
+	for addonVersion, k8sVersions := range matrix {
+		for _, v := range k8sVersions {
+			if normalizeK8sVersion(v) == k8sVersion {
+				currentParts, currentOK := parseAddonVersionFloor(addonVersion)
+				if latest == "" {
+					latest = addonVersion
+					if currentOK {
+						latestParts = currentParts
+					}
+					break
+				}
+
+				if latestParts != nil && currentOK {
+					if compareAddonVersionFloors(currentParts, latestParts) > 0 {
+						latest = addonVersion
+						latestParts = currentParts
+					}
+					break
+				}
+
+				if latestParts == nil && currentOK {
+					latest = addonVersion
+					latestParts = currentParts
+					break
+				}
+
+				if latestParts == nil && !currentOK && addonVersion > latest {
+					latest = addonVersion
+				}
+				break
+			}
+		}
+	}
+	return latest
 }
 
 const analysisSystemPrompt = `You are a deterministic Kubernetes addon compatibility analyzer.
@@ -196,8 +750,9 @@ var evidenceVersionPattern = regexp.MustCompile(`(?i)\bv?\d+\.\d+(?:\.\d+)?\b`)
 var evidenceSupportPattern = regexp.MustCompile(`(?i)(compat|support|matrix|tested|require|recommended)`)
 var evidenceNegationPattern = regexp.MustCompile(`(?i)(non[- ]matrix|without (?:a )?(?:compatibility|support|version|matrix)|no (?:compatibility|support|version|matrix)|does not (?:contain|include)|lacks?)`)
 
-func analyzeCompatibility(ctx context.Context, client *genai.Client, model string, k8sVersion string, addons []addonWithInfo, outputFormat string, outputPath string) error {
-	results := make([]output.AddonCompatibility, 0, len(addons))
+func analyzeCompatibility(ctx context.Context, client *genai.Client, model string, k8sVersion string, addons []addonWithInfo, storedResults []output.AddonCompatibility, outputFormat string, outputPath string) error {
+	results := make([]output.AddonCompatibility, 0, len(storedResults)+len(addons))
+	results = append(results, storedResults...)
 	for addonIndex, addonInfo := range addons {
 		fmt.Fprintf(
 			os.Stderr,
@@ -221,6 +776,7 @@ func analyzeCompatibility(ctx context.Context, client *genai.Client, model strin
 				result.Note += fmt.Sprintf(" Source: %s", addonInfo.CompatibilityURL)
 			}
 		}
+		result.DataSource = output.DataSourceRuntime
 		fmt.Fprintf(
 			os.Stderr,
 			"Completed addon %d/%d: %s -> %s\n",

@@ -195,6 +195,71 @@ func TestHasK8sMatrix_EmptyPage(t *testing.T) {
 	}
 }
 
+// --- ClassifyK8sMatrix tiered tests ---
+
+func TestClassifyK8sMatrix_Strict(t *testing.T) {
+	tests := []struct {
+		name string
+		page string
+	}{
+		{"full matrix", "Compatibility matrix: supported Kubernetes versions: Kubernetes 1.28, Kubernetes 1.29"},
+		{"version support", "Version support: Kubernetes 1.30 is supported"},
+		{"k8s compat", "k8s compatibility: k8s 1.28 and k8s 1.29"},
+		{"v-prefix strict", "Supported versions: Kubernetes v1.28, v1.29, v1.30"},
+		{"reversed order strict", "Compatibility matrix: v1.28 Kubernetes and v1.29 Kubernetes are supported"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ClassifyK8sMatrix(tt.page); got != matrixTierStrict {
+				t.Errorf("ClassifyK8sMatrix() = %q, want %q", got, matrixTierStrict)
+			}
+		})
+	}
+}
+
+func TestClassifyK8sMatrix_Partial(t *testing.T) {
+	tests := []struct {
+		name string
+		page string
+	}{
+		{"requirements keyword", "Requirements: Kubernetes cluster running v1.25 or later"},
+		{"prerequisites keyword", "Prerequisites: a Kubernetes 1.26+ cluster is required"},
+		{"tested with", "Tested with Kubernetes clusters version 1.27 and 1.28"},
+		{"requires k8s", "Requires Kubernetes >= 1.22 with CSI support"},
+		{"platform requirements", "Platform requirements: Kubernetes v1.24 minimum"},
+		{"compatible with", "Compatible with Kubernetes versions from 1.25 to 1.30"},
+		{"loose distance", "This addon runs on Kubernetes. Check the requirements for version 1.28 or newer."},
+		{"newline and reversed order", "Requirements:\nv1.28 is validated on Kubernetes clusters"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ClassifyK8sMatrix(tt.page); got != matrixTierPartial {
+				t.Errorf("ClassifyK8sMatrix() = %q, want %q", got, matrixTierPartial)
+			}
+		})
+	}
+}
+
+func TestClassifyK8sMatrix_None(t *testing.T) {
+	tests := []struct {
+		name string
+		page string
+	}{
+		{"no k8s mention", "Install using helm install my-chart"},
+		{"version but no keyword", "Install on Kubernetes 1.28 using helm install"},
+		{"keyword but no version", "See our compatibility matrix for details"},
+		{"empty page", ""},
+		{"generic overview", "This is a general product overview page"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ClassifyK8sMatrix(tt.page); got != matrixTierNone {
+				t.Errorf("ClassifyK8sMatrix() = %q, want %q", got, matrixTierNone)
+			}
+		})
+	}
+}
+
 // --- New tests: aggregation and flag logic ---
 
 func TestAggregation_SharedURL(t *testing.T) {
@@ -263,8 +328,8 @@ func TestReporting_MixedConsumers(t *testing.T) {
 
 	results := map[string]*urlResult{
 		"https://example.com/page": {
-			reachable:    true,
-			contentValid: false, // regex fails
+			reachable:  true,
+			matrixTier: matrixTierNone,
 		},
 	}
 
@@ -332,6 +397,228 @@ func TestLinksOnlyFlag(t *testing.T) {
 
 	if len(tasks) != 2 {
 		t.Errorf("expected 2 tasks (--links keeps all URLs), got %d", len(tasks))
+	}
+}
+
+// --- validateStoredData tests ---
+
+func TestValidateStoredData_ValidFullMatrix(t *testing.T) {
+	addons := []addon.Addon{
+		{
+			Name: "cert-manager",
+			KubernetesCompatibility: map[string][]string{
+				"1.15": {"1.28", "1.29", "1.30"},
+			},
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 0 {
+		t.Fatalf("expected 0 problems, got %d: %+v", len(problems), problems)
+	}
+}
+
+func TestValidateStoredData_ValidMinVersion(t *testing.T) {
+	addons := []addon.Addon{
+		{
+			Name:                 "karpenter",
+			KubernetesMinVersion: "1.23",
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 0 {
+		t.Fatalf("expected 0 problems, got %d: %+v", len(problems), problems)
+	}
+}
+
+func TestValidateStoredData_InvalidMinVersion(t *testing.T) {
+	addons := []addon.Addon{
+		{
+			Name:                 "bad-addon",
+			KubernetesMinVersion: "v1.23",
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 1 {
+		t.Fatalf("expected 1 problem, got %d: %+v", len(problems), problems)
+	}
+	if problems[0].field != "kubernetes_min_version" {
+		t.Errorf("expected field kubernetes_min_version, got %q", problems[0].field)
+	}
+}
+
+func TestValidateStoredData_InvalidK8sVersionInMatrix(t *testing.T) {
+	addons := []addon.Addon{
+		{
+			Name: "bad-matrix",
+			KubernetesCompatibility: map[string][]string{
+				"1.5": {"1.28", "v1.29", "latest"},
+			},
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 2 {
+		t.Fatalf("expected 2 problems, got %d: %+v", len(problems), problems)
+	}
+}
+
+func TestValidateStoredData_EmptyKey(t *testing.T) {
+	addons := []addon.Addon{
+		{
+			Name: "empty-key",
+			KubernetesCompatibility: map[string][]string{
+				"": {"1.28"},
+			},
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 1 {
+		t.Fatalf("expected 1 problem, got %d: %+v", len(problems), problems)
+	}
+	if problems[0].reason != "addon version key must be non-empty" {
+		t.Errorf("unexpected reason: %q", problems[0].reason)
+	}
+}
+
+func TestValidateStoredData_EmptyVersionList(t *testing.T) {
+	addons := []addon.Addon{
+		{
+			Name: "empty-versions",
+			KubernetesCompatibility: map[string][]string{
+				"1.5": {},
+			},
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 1 {
+		t.Fatalf("expected 1 problem, got %d: %+v", len(problems), problems)
+	}
+	if problems[0].reason != "K8s version list must be non-empty" {
+		t.Errorf("unexpected reason: %q", problems[0].reason)
+	}
+}
+
+func TestValidateStoredData_NoStoredData(t *testing.T) {
+	addons := []addon.Addon{
+		{Name: "no-data"},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 0 {
+		t.Fatalf("expected 0 problems, got %d: %+v", len(problems), problems)
+	}
+}
+
+func TestValidateStoredData_UnsupportedKeysOnly(t *testing.T) {
+	addons := []addon.Addon{
+		{
+			Name: "unsupported-only",
+			KubernetesCompatibility: map[string][]string{
+				"master": {"1.31"},
+			},
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 1 {
+		t.Fatalf("expected 1 problem, got %d: %+v", len(problems), problems)
+	}
+	if problems[0].reason != "matrix must contain at least one key format supported by stored resolver" {
+		t.Fatalf("unexpected reason: %q", problems[0].reason)
+	}
+}
+
+func TestValidateStoredData_MixedKeysAtLeastOneSupported(t *testing.T) {
+	addons := []addon.Addon{
+		{
+			Name: "mixed-keys",
+			KubernetesCompatibility: map[string][]string{
+				"master": {"1.31"},
+				"1.13.x": {"1.31"},
+			},
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 0 {
+		t.Fatalf("expected 0 problems, got %d: %+v", len(problems), problems)
+	}
+}
+
+func TestValidateStoredData_SupportedRangeAndThresholdPlusKeys(t *testing.T) {
+	addons := []addon.Addon{
+		{
+			Name: "advanced-keys",
+			KubernetesCompatibility: map[string][]string{
+				"v2.0.0-v2.1.3": {"1.31"},
+				"v2.5.0+":       {"1.31"},
+			},
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 0 {
+		t.Fatalf("expected 0 problems, got %d: %+v", len(problems), problems)
+	}
+}
+
+func TestValidateStoredData_ValidMaxVersion(t *testing.T) {
+	addons := []addon.Addon{
+		{
+			Name:                 "old-addon",
+			KubernetesMinVersion: "1.20",
+			KubernetesMaxVersion: "1.28",
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 0 {
+		t.Fatalf("expected 0 problems, got %d: %+v", len(problems), problems)
+	}
+}
+
+func TestValidateStoredData_InvalidMaxVersion(t *testing.T) {
+	addons := []addon.Addon{
+		{
+			Name:                 "bad-addon",
+			KubernetesMaxVersion: "v1.28",
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 1 {
+		t.Fatalf("expected 1 problem, got %d: %+v", len(problems), problems)
+	}
+	if problems[0].field != "kubernetes_max_version" {
+		t.Errorf("expected field kubernetes_max_version, got %q", problems[0].field)
+	}
+}
+
+func TestValidateStoredData_MinExceedsMax(t *testing.T) {
+	addons := []addon.Addon{
+		{
+			Name:                 "inverted-addon",
+			KubernetesMinVersion: "1.30",
+			KubernetesMaxVersion: "1.20",
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 1 {
+		t.Fatalf("expected 1 problem, got %d: %+v", len(problems), problems)
+	}
+	if problems[0].reason != "min version must not exceed max version" {
+		t.Errorf("unexpected reason: %q", problems[0].reason)
+	}
+}
+
+func TestValidateStoredData_MinExceedsMaxNumeric(t *testing.T) {
+	// "1.28" < "1.9" lexicographically, but 1.28 > 1.9 numerically.
+	addons := []addon.Addon{
+		{
+			Name:                 "numeric-edge",
+			KubernetesMinVersion: "1.28",
+			KubernetesMaxVersion: "1.9",
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 1 {
+		t.Fatalf("expected 1 problem for min=1.28 > max=1.9, got %d: %+v", len(problems), problems)
+	}
+	if problems[0].reason != "min version must not exceed max version" {
+		t.Errorf("unexpected reason: %q", problems[0].reason)
 	}
 }
 

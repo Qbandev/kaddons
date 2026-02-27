@@ -6,7 +6,7 @@ kaddons is configured entirely through CLI flags and environment variables. Ther
 
 | Variable | Description |
 |----------|-------------|
-| `GEMINI_API_KEY` | Gemini API key. Used when `--key` flag is not provided. Required for the main command; not needed for `kaddons-validate`. |
+| `GEMINI_API_KEY` | Gemini API key. Used when `--key` flag is not provided. Required only when at least one addon requires runtime LLM analysis; not needed for `kaddons-validate`. |
 
 ## Root command flags
 
@@ -30,13 +30,15 @@ kaddons [flags]
 `kaddons-validate` is a separate binary for development and CI — it is not a subcommand of `kaddons`.
 
 ```bash
-go run ./cmd/kaddons-validate              # Run both checks (default)
+go run ./cmd/kaddons-validate              # Run live checks (default)
+go run ./cmd/kaddons-validate --stored-only # Validate stored compatibility fields only (no network)
 go run ./cmd/kaddons-validate --links      # Only reachability checks
 go run ./cmd/kaddons-validate --matrix     # Only content validation
-make validate                              # Shorthand
+make validate                              # Deterministic stored-data validation
+make validate-live                         # Full live validation (links + matrix content)
 ```
 
-Validates addon database URLs. No cluster access or API key needed. Flags `--links` and `--matrix` are mutually exclusive.
+`--stored-only` validates embedded compatibility fields (`kubernetes_compatibility`, `kubernetes_min_version`) without network calls. `--links` and `--matrix` are mutually exclusive, and `--stored-only` cannot be combined with either.
 
 - Exit `0`: all checks passed
 - Exit `1`: validation failures found (Markdown table printed)
@@ -74,6 +76,7 @@ Default format (`-o json`). Returns a `CompatibilityReport` object:
 | `installed_version` | string | Version detected from cluster labels/images |
 | `compatible` | string | `"true"`, `"false"`, or `"unknown"` |
 | `latest_compatible_version` | string | Recommended version (omitted if not determined) |
+| `data_source` | string | Verdict source: `"stored"` or `"llm"` |
 | `note` | string | Source-cited explanation with URL and support dates |
 
 The `compatible` field is always a JSON string, never a boolean or null. This is enforced by the `Status` type's custom `UnmarshalJSON` which normalizes LLM output.
@@ -93,7 +96,8 @@ Detecting cluster version...
 Cluster version: 1.30
 Discovered 47 workloads
 Matched 12 known addons
-Enriching 12 addons...
+Resolved cert-manager from stored data -> true
+Enriching 4 addons (runtime)...
 Analyzing with gemini-3-flash-preview...
 Done: 8 compatible, 2 incompatible, 2 unknown
 ```

@@ -17,7 +17,8 @@ import (
 )
 
 var htmlTagRe = regexp.MustCompile(`<[^>]*>`)
-var blockTagRe = regexp.MustCompile(`(?i)</?(?:p|div|li|tr|td|th|h[1-6]|br|table|section|article|ul|ol)[^>]*>`)
+var blockTagRe = regexp.MustCompile(`(?i)</?(?:p|div|li|tr|h[1-6]|br|table|section|article|ul|ol)[^>]*>`)
+var cellOpenTagRe = regexp.MustCompile(`(?i)<(?:td|th)[^>]*>`)
 var horizontalWhitespaceRe = regexp.MustCompile(`[ \t\r\f\v]+`)
 var blankLineRe = regexp.MustCompile(`\n{2,}`)
 
@@ -211,6 +212,8 @@ func normalizeFetchedContent(rawText string, isRaw bool) string {
 	if !isRaw {
 		// Preserve block boundaries as newlines so version matrices/tables remain extractable.
 		text = blockTagRe.ReplaceAllString(text, "\n")
+		// Replace table cell opening tags with pipe delimiters to preserve row structure.
+		text = cellOpenTagRe.ReplaceAllString(text, " | ")
 		text = htmlTagRe.ReplaceAllString(text, " ")
 		text = horizontalWhitespaceRe.ReplaceAllString(text, " ")
 		text = blankLineRe.ReplaceAllString(text, "\n")

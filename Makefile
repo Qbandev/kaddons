@@ -3,7 +3,7 @@ VERSION ?= dev
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
 DATE ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-.PHONY: build clean install uninstall validate
+.PHONY: build clean install uninstall validate validate-live extract
 
 build:
 	go build -ldflags "-s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)" -o kaddons ./cmd/kaddons
@@ -19,4 +19,10 @@ uninstall:
 	rm -f $(PREFIX)/bin/kaddons
 
 validate:
+	go run ./cmd/kaddons-validate --stored-only
+
+validate-live:
 	go run ./cmd/kaddons-validate
+
+extract:
+	go run ./cmd/kaddons-extract

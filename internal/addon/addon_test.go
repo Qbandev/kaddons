@@ -1,6 +1,7 @@
 package addon
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -530,6 +531,111 @@ func TestResolveEOLStatus_EmptyCycles(t *testing.T) {
 	}
 	if until != "" {
 		t.Errorf("ResolveEOLStatus until = %q, want empty", until)
+	}
+}
+
+func TestHasStoredCompatibility_FullMatrix(t *testing.T) {
+	a := &Addon{
+		Name: "test-addon",
+		KubernetesCompatibility: map[string][]string{
+			"1.5": {"1.28", "1.29"},
+		},
+	}
+	if !a.HasStoredCompatibility() {
+		t.Error("HasStoredCompatibility() should return true for addon with full matrix")
+	}
+}
+
+func TestHasStoredCompatibility_MinVersionOnly(t *testing.T) {
+	a := &Addon{
+		Name:                 "test-addon",
+		KubernetesMinVersion: "1.20",
+	}
+	if !a.HasStoredCompatibility() {
+		t.Error("HasStoredCompatibility() should return true for addon with min version")
+	}
+}
+
+func TestHasStoredCompatibility_NoData(t *testing.T) {
+	a := &Addon{
+		Name: "test-addon",
+	}
+	if a.HasStoredCompatibility() {
+		t.Error("HasStoredCompatibility() should return false for addon with no stored data")
+	}
+}
+
+func TestHasStoredCompatibility_MaxVersionOnly(t *testing.T) {
+	a := &Addon{
+		Name:                 "test-addon",
+		KubernetesMaxVersion: "1.28",
+	}
+	if !a.HasStoredCompatibility() {
+		t.Error("HasStoredCompatibility() should return true for addon with max version")
+	}
+}
+
+func TestHasStoredCompatibility_EmptyMatrix(t *testing.T) {
+	a := &Addon{
+		Name:                    "test-addon",
+		KubernetesCompatibility: map[string][]string{},
+	}
+	if a.HasStoredCompatibility() {
+		t.Error("HasStoredCompatibility() should return false for addon with empty matrix")
+	}
+}
+
+func TestAddonJSONRoundTrip_WithStoredData(t *testing.T) {
+	original := Addon{
+		Name:                   "cert-manager",
+		ProjectURL:             "https://cert-manager.io",
+		Repository:             "https://github.com/cert-manager/cert-manager",
+		CompatibilityMatrixURL: "https://cert-manager.io/docs/releases/",
+		ChangelogLocation:      "https://github.com/cert-manager/cert-manager/releases",
+		KubernetesCompatibility: map[string][]string{
+			"1.15": {"1.28", "1.29", "1.30", "1.31"},
+			"1.14": {"1.27", "1.28", "1.29", "1.30"},
+		},
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("Marshal error: %v", err)
+	}
+
+	var decoded Addon
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("Unmarshal error: %v", err)
+	}
+
+	if decoded.Name != original.Name {
+		t.Errorf("Name = %q, want %q", decoded.Name, original.Name)
+	}
+	if len(decoded.KubernetesCompatibility) != 2 {
+		t.Fatalf("KubernetesCompatibility has %d entries, want 2", len(decoded.KubernetesCompatibility))
+	}
+	if len(decoded.KubernetesCompatibility["1.15"]) != 4 {
+		t.Fatalf("KubernetesCompatibility[1.15] has %d entries, want 4", len(decoded.KubernetesCompatibility["1.15"]))
+	}
+}
+
+func TestAddonJSONRoundTrip_OmitsEmptyStoredData(t *testing.T) {
+	original := Addon{
+		Name:       "test-addon",
+		ProjectURL: "https://example.com",
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("Marshal error: %v", err)
+	}
+
+	jsonStr := string(data)
+	if strings.Contains(jsonStr, "kubernetes_compatibility") {
+		t.Error("JSON should omit empty kubernetes_compatibility")
+	}
+	if strings.Contains(jsonStr, "kubernetes_min_version") {
+		t.Error("JSON should omit empty kubernetes_min_version")
 	}
 }
 
