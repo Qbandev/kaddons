@@ -323,7 +323,7 @@ func isNonSemverKey(key string) bool {
 		return true
 	}
 	first := key[0]
-	return !(first >= '0' && first <= '9')
+	return first < '0' || first > '9'
 }
 
 // parseVersionRangeKey parses keys like "2.0.0-v2.1.3" into a lo/hi pair.
