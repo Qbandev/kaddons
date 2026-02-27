@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1](https://github.com/Qbandev/kaddons/compare/v0.3.0...v0.3.1) (2026-02-27)
+
+
+### Bug Fixes
+
+* consolidate release pipeline into single workflow ([#24](https://github.com/Qbandev/kaddons/issues/24)) ([b208eb6](https://github.com/Qbandev/kaddons/commit/b208eb69278a8dc8ac06aaa602e1f9da13923a18))
+* remove skip-github-release to restore tag creation ([#22](https://github.com/Qbandev/kaddons/issues/22)) ([3d60981](https://github.com/Qbandev/kaddons/commit/3d60981a975c95698fe0dd495032713c21f5e6c8))
+
 ## [0.3.0](https://github.com/Qbandev/kaddons/compare/v0.2.2...v0.3.0) (2026-02-27)
 
 
