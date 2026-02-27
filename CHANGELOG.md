@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/Qbandev/kaddons/compare/v0.4.0...v0.4.1) (2026-02-27)
+
+
+### Bug Fixes
+
+* remove outdated release immutability note from docs ([#28](https://github.com/Qbandev/kaddons/issues/28)) ([ea443e0](https://github.com/Qbandev/kaddons/commit/ea443e0ce98ffdb83831f134d2f745a0864cfdbd))
+
 ## [0.4.0](https://github.com/Qbandev/kaddons/compare/v0.3.1...v0.4.0) (2026-02-27)
 
 
