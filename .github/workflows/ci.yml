@@ -81,9 +81,21 @@ jobs:
     if: github.event_name == 'push'
     runs-on: macos-latest
     steps:
-      - name: Tap and install formula
+      - name: Tap repository
+        run: brew tap qbandev/tap
+      - name: Check formula availability
+        id: homebrew_formula
         run: |
-          brew tap qbandev/tap
+          if brew info qbandev/tap/kaddons >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Formula qbandev/tap/kaddons not found yet; skipping install verification."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Tap and install formula
+        if: steps.homebrew_formula.outputs.exists == 'true'
+        run: |
           brew install qbandev/tap/kaddons
       - name: Verify Homebrew-installed binary
+        if: steps.homebrew_formula.outputs.exists == 'true'
         run: kaddons --version
