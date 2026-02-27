@@ -19,7 +19,7 @@ builds:
       - -X main.date={{.Date}}
 
 archives:
-  - format: tar.gz
+  - formats: [tar.gz]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 checksum:
@@ -28,16 +28,9 @@ checksum:
 
 release:
   mode: keep-existing
-  replace_existing_artifacts: true
 
 changelog:
-  sort: asc
-  filters:
-    exclude:
-      - '^docs:'
-      - '^test:'
-      - '^ci:'
-      - '^chore:'
+  disable: true
 
 brews:
   - name: kaddons

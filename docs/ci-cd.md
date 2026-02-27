@@ -54,20 +54,13 @@ Runs every Monday at 08:00 UTC (also manually triggerable).
 
 This catches URL rot in the addon database — projects move, rename repositories, or restructure documentation.
 
-### Release automation (`release-please.yml`)
+### Release (`release.yml`)
 
-Triggered on each push to `main` (including merged PRs).
+Triggered on each push to `main`. Single workflow with three chained jobs:
 
-1. Uses [release-please](https://github.com/googleapis/release-please-action) to determine semantic version bumps from commit history
-2. Creates or updates an automated release PR with proposed version and changelog updates
-3. Creates the final tag/release when the release PR is merged
-
-### Publish release artifacts (`release.yml`)
-
-Triggered by tags matching `v*` (created by release-please automation).
-
-1. Runs the full test suite (must pass before publish)
-2. Runs [GoReleaser](https://goreleaser.com) to build, package, publish GitHub assets, and update Homebrew tap
+1. **release-please** — [release-please](https://github.com/googleapis/release-please-action) computes the next semantic version from conventional commits, creates or updates a release PR, and creates the GitHub Release + tag when the PR is merged
+2. **test** — runs the full test suite (only if a release was created)
+3. **goreleaser** — [GoReleaser](https://goreleaser.com) builds binaries, uploads assets to the existing GitHub Release, and pushes the Homebrew formula (only if tests pass)
 
 ## Release process
 
@@ -99,23 +92,24 @@ Archive naming: `kaddons_{version}_{os}_{arch}.tar.gz`
 
 ### Creating a release
 
-Normal development pull requests are merged into `main` as usual. Release automation then:
+Releases are fully automated. Use [conventional commits](https://www.conventionalcommits.org/) when merging to `main`:
 
-1. creates or updates an automated release PR based on merged commits
-2. proposes the next version and changelog in that release PR
+- `feat: ...` → minor version bump
+- `fix: ...` → patch version bump
+- `feat!: ...` or `BREAKING CHANGE:` → major version bump
 
-When the release PR is merged, the publish workflow:
+release-please accumulates changes into a release PR. When the release PR is merged:
 
-1. creates the corresponding version tag automatically
-2. publishes release artifacts and Homebrew formula updates
+1. release-please creates the GitHub Release with changelog and tag
+2. GoReleaser builds binaries and uploads them to the release
+3. GoReleaser pushes the Homebrew formula to `qbandev/homebrew-tap`
 
-Manual tag pushes (`git tag vX.Y.Z && git push origin vX.Y.Z`) are still supported as a fallback.
-
-`HOMEBREW_TAP_TOKEN` is required because Homebrew publishing writes formula updates to the external `qbandev/homebrew-tap` repository.
+`RELEASE_PLEASE_TOKEN` (PAT) is required so release PRs trigger CI checks.
+`HOMEBREW_TAP_TOKEN` (PAT) is required because Homebrew publishing writes formula updates to the external `qbandev/homebrew-tap` repository.
 
 ### Changelog
 
-GoReleaser generates changelogs from commit messages, excluding prefixes: `docs:`, `test:`, `ci:`, `chore:`.
+release-please generates and maintains `CHANGELOG.md` from conventional commit messages. GoReleaser's changelog is disabled to avoid duplication.
 
 ## Local development CI
 
