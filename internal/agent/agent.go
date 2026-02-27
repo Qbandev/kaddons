@@ -207,6 +207,12 @@ func resolveFromStoredData(info addonWithInfo, k8sVersion string) output.AddonCo
 	}
 
 	k8sMajorMinor := normalizeK8sVersion(k8sVersion)
+	finalizeResult := func() output.AddonCompatibility {
+		if info.DBMatch != nil {
+			result.Note = appendSourceReference(result.Note, info.DBMatch.CompatibilityMatrixURL)
+		}
+		return result
+	}
 
 	// Full matrix: addon-version → []k8s-versions
 	if len(info.DBMatch.KubernetesCompatibility) > 0 {
@@ -233,13 +239,13 @@ func resolveFromStoredData(info addonWithInfo, k8sVersion string) output.AddonCo
 					k8sMajorMinor,
 				)
 				result.LatestCompatibleVersion = findLatestCompatibleVersion(info.DBMatch.KubernetesCompatibility, k8sMajorMinor)
-				return result
+				return finalizeResult()
 			}
 
 			// Installed version not in matrix — fall back to min/max version if available.
 			if resolveFromMinMaxVersion(info.DBMatch, k8sMajorMinor, &result) {
 				result.Note = fmt.Sprintf("Installed version %s not found in stored matrix; %s", info.Version, result.Note)
-				return result
+				return finalizeResult()
 			}
 
 			result.Compatible = output.StatusUnknown
@@ -250,7 +256,7 @@ func resolveFromStoredData(info addonWithInfo, k8sVersion string) output.AddonCo
 			} else {
 				result.Note = fmt.Sprintf("Installed version %s not found in stored compatibility matrix", info.Version)
 			}
-			return result
+			return finalizeResult()
 		}
 
 		// Check if target K8s version is in the supported list
@@ -258,7 +264,7 @@ func resolveFromStoredData(info addonWithInfo, k8sVersion string) output.AddonCo
 			if normalizeK8sVersion(v) == k8sMajorMinor {
 				result.Compatible = output.StatusTrue
 				result.Note = fmt.Sprintf("Addon version %s supports K8s %s per stored matrix", matchedKey, k8sMajorMinor)
-				return result
+				return finalizeResult()
 			}
 		}
 
@@ -268,17 +274,17 @@ func resolveFromStoredData(info addonWithInfo, k8sVersion string) output.AddonCo
 			result.LatestCompatibleVersion = latestKey
 		}
 		result.Note = fmt.Sprintf("Addon version %s does not support K8s %s per stored matrix (supports: %s)", matchedKey, k8sMajorMinor, strings.Join(matchedK8sVersions, ", "))
-		return result
+		return finalizeResult()
 	}
 
 	// Min/max version check (no full matrix available)
 	if resolveFromMinMaxVersion(info.DBMatch, k8sMajorMinor, &result) {
-		return result
+		return finalizeResult()
 	}
 
 	result.Compatible = output.StatusUnknown
 	result.Note = "No stored compatibility data available"
-	return result
+	return finalizeResult()
 }
 
 func matrixKeyMatchesInstalledVersion(matrixKey string, installedVersion string) bool {
@@ -416,6 +422,9 @@ func scoreMatrixKeyMatch(matrixKey string, installedVersion string) (int, bool) 
 		if installedVersion == keyBase || strings.HasPrefix(installedVersion, keyBase+".") {
 			return 100 + len(keyNorm), true
 		}
+	case isPatchLevelKeyCompatible(keyNorm, installedVersion):
+		// Matrix tables often list one patch per compatible minor line.
+		return 150 + len(keyNorm), true
 	}
 	if matrixKeyMatchesInstalledVersion(matrixKey, installedVersion) {
 		// Keep explicit/prefix/wildcard precedence above, but still allow
@@ -503,7 +512,7 @@ func findThresholdCompatibilityMatch(matrix map[string][]string, installedVersio
 func looksLikeThresholdStyleMatrix(matrix map[string][]string) bool {
 	for key := range matrix {
 		normalizedKey := strings.ToLower(strings.TrimSpace(key))
-		if strings.HasPrefix(normalizedKey, ">=") || strings.Contains(normalizedKey, ".x") {
+		if strings.HasPrefix(normalizedKey, ">=") || strings.Contains(normalizedKey, ".x") || strings.HasSuffix(normalizedKey, "+") {
 			return true
 		}
 	}
@@ -525,6 +534,7 @@ func parseAddonVersionFloor(rawVersion string) ([]int, bool) {
 	version = strings.TrimPrefix(version, "v")
 	version = strings.TrimSpace(version)
 	version = strings.TrimSuffix(version, ".x")
+	version = strings.TrimSuffix(version, "+")
 	if version == "" {
 		return nil, false
 	}
@@ -632,6 +642,45 @@ func parseLeadingInt(value string) int {
 		numericValue = numericValue*10 + int(char-'0')
 	}
 	return numericValue
+}
+
+func appendSourceReference(note string, sourceURL string) string {
+	if sourceURL == "" || strings.Contains(note, sourceURL) {
+		return note
+	}
+	if note == "" {
+		return fmt.Sprintf("Source: %s", sourceURL)
+	}
+	return fmt.Sprintf("%s Source: %s", note, sourceURL)
+}
+
+func isPatchLevelKeyCompatible(matrixKey string, installedVersion string) bool {
+	if !isSimpleSemverTriplet(matrixKey) {
+		return false
+	}
+	matrixParts, matrixOK := parseAddonVersionFloor(matrixKey)
+	installedParts, installedOK := parseAddonVersionFloor(installedVersion)
+	if !matrixOK || !installedOK || len(matrixParts) < 3 || len(installedParts) < 3 {
+		return false
+	}
+	if matrixParts[0] != installedParts[0] || matrixParts[1] != installedParts[1] {
+		return false
+	}
+	return compareAddonVersionFloors(installedParts, matrixParts) >= 0
+}
+
+func isSimpleSemverTriplet(version string) bool {
+	dotCount := 0
+	for _, character := range version {
+		if character == '.' {
+			dotCount++
+			continue
+		}
+		if character < '0' || character > '9' {
+			return false
+		}
+	}
+	return dotCount == 2
 }
 
 // findLatestCompatibleVersion finds the latest addon version in the matrix

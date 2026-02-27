@@ -373,7 +373,7 @@ func TestAddonCompatibility_DataSourceOmittedWhenEmpty(t *testing.T) {
 func TestFormatOutput_HTMLContainsSourceColumn(t *testing.T) {
 	tempDir := t.TempDir()
 	reportPath := filepath.Join(tempDir, "source-report.html")
-	raw := `[{"name":"stored-addon","namespace":"default","installed_version":"v1.0.0","compatible":"true","data_source":"stored"},{"name":"runtime-addon","namespace":"default","installed_version":"v2.0.0","compatible":"unknown","data_source":"runtime"}]`
+	raw := `[{"name":"stored-addon","namespace":"default","installed_version":"v1.0.0","compatible":"true","data_source":"stored"},{"name":"llm-addon","namespace":"default","installed_version":"v2.0.0","compatible":"unknown","data_source":"llm"}]`
 
 	_, err := FormatOutput(raw, "1.31", "html", reportPath)
 	if err != nil {
@@ -391,15 +391,15 @@ func TestFormatOutput_HTMLContainsSourceColumn(t *testing.T) {
 	if !strings.Contains(content, "source-stored") {
 		t.Error("HTML report missing source-stored class")
 	}
-	if !strings.Contains(content, "source-runtime") {
-		t.Error("HTML report missing source-runtime class")
+	if !strings.Contains(content, "source-llm") {
+		t.Error("HTML report missing source-llm class")
 	}
 }
 
 func TestFormatOutput_HTMLLinkifiesNotesURLsInNewWindow(t *testing.T) {
 	tempDir := t.TempDir()
 	reportPath := filepath.Join(tempDir, "notes-links-report.html")
-	raw := `[{"name":"argo-cd","namespace":"argocd","installed_version":"v3.0.8","compatible":"unknown","note":"See docs: https://argo-cd.readthedocs.io/en/stable/operator-manual/installation/#tested-versions","data_source":"runtime"}]`
+	raw := `[{"name":"argo-cd","namespace":"argocd","installed_version":"v3.0.8","compatible":"unknown","note":"See docs: https://argo-cd.readthedocs.io/en/stable/operator-manual/installation/#tested-versions","data_source":"llm"}]`
 
 	_, err := FormatOutput(raw, "1.31", "html", reportPath)
 	if err != nil {

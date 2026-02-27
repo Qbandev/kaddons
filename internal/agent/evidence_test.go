@@ -619,3 +619,49 @@ func TestResolveFromStoredData_NonSemverKeysSkipped(t *testing.T) {
 		t.Errorf("expected note to reference '1.29', not 'master': %s", result.Note)
 	}
 }
+
+func TestResolveFromStoredData_ThresholdPlusKey(t *testing.T) {
+	info := addonWithInfo{
+		DetectedAddon: cluster.DetectedAddon{
+			Name:      "aws-load-balancer-controller",
+			Namespace: "kube-system",
+			Version:   "v2.11.0",
+		},
+		DBMatch: &addon.Addon{
+			Name:                   "AWS Load Balancer Controller",
+			CompatibilityMatrixURL: "https://example.com/alb-compatibility",
+			KubernetesCompatibility: map[string][]string{
+				"v2.5.0+": {"1.22", "1.23", "1.24", "1.25", "1.26", "1.27", "1.28", "1.29", "1.30", "1.31", "1.32", "1.33", "1.34"},
+			},
+		},
+	}
+
+	result := resolveFromStoredData(info, "1.31")
+	if result.Compatible != output.StatusTrue {
+		t.Fatalf("expected StatusTrue for + threshold key, got %q (note: %s)", result.Compatible, result.Note)
+	}
+	if !strings.Contains(result.Note, "Source: https://example.com/alb-compatibility") {
+		t.Fatalf("expected stored note to include source URL, got: %s", result.Note)
+	}
+}
+
+func TestResolveFromStoredData_PatchLineCompatibility(t *testing.T) {
+	info := addonWithInfo{
+		DetectedAddon: cluster.DetectedAddon{
+			Name:      "coredns",
+			Namespace: "kube-system",
+			Version:   "v1.11.4-eksbuild.28",
+		},
+		DBMatch: &addon.Addon{
+			Name: "CoreDNS",
+			KubernetesCompatibility: map[string][]string{
+				"v1.11.3": {"1.31", "1.32"},
+			},
+		},
+	}
+
+	result := resolveFromStoredData(info, "1.31")
+	if result.Compatible != output.StatusTrue {
+		t.Fatalf("expected StatusTrue for compatible patch line, got %q (note: %s)", result.Compatible, result.Note)
+	}
+}

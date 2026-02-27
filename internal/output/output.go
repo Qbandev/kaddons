@@ -39,7 +39,7 @@ func (s *Status) UnmarshalJSON(data []byte) error {
 // Data source constants for provenance tracking.
 const (
 	DataSourceStored  = "stored"
-	DataSourceRuntime = "runtime"
+	DataSourceRuntime = "llm"
 )
 
 // AddonCompatibility represents the compatibility verdict for a single addon.
@@ -142,9 +142,12 @@ func writeHTMLReport(addons []AddonCompatibility, k8sVersion string, outputPath 
 		case DataSourceStored:
 			row.DataSourceClass = "source-stored"
 			row.DataSourceLabel = "stored"
+		case DataSourceRuntime:
+			row.DataSourceClass = "source-llm"
+			row.DataSourceLabel = "llm"
 		default:
-			row.DataSourceClass = "source-runtime"
-			row.DataSourceLabel = "runtime"
+			row.DataSourceClass = "source-llm"
+			row.DataSourceLabel = "llm"
 		}
 		rows = append(rows, row)
 	}
@@ -221,7 +224,7 @@ const htmlTemplate = `<!DOCTYPE html>
     .status-false { color:#ff7b72; border-color:#8b2c35; background:#2d1419; }
     .status-unknown { color:#d29922; border-color:#6f5a1a; background:#252218; }
     .source-stored { color:#a5d6ff; border-color:#1f4a7a; background:#0d2240; }
-    .source-runtime { color:#9fb0c3; border-color:#2b3541; background:#161b22; }
+    .source-llm { color:#9fb0c3; border-color:#2b3541; background:#161b22; }
     .muted { color:#9fb0c3; }
   </style>
 </head>
