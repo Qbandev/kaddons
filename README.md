@@ -1,6 +1,6 @@
 # kaddons
 
-Kubernetes addon compatibility checker. Discovers addons running in any Kubernetes cluster, cross-references them against a curated database of 668 addons, and uses Gemini AI to determine whether each addon is compatible with the cluster's Kubernetes version.
+Kubernetes addon compatibility checker. Discovers addons running in any Kubernetes cluster, cross-references them against a curated database of 668 addons, and determine whether each addon is compatible with the cluster's Kubernetes version.
 
 Works with EKS, GKE, AKS, k3s, and any conformant Kubernetes cluster.
 
@@ -44,12 +44,6 @@ make build
 # Binary: ./kaddons
 ```
 
-All three installation methods above are validated in CI, including a live Homebrew tap install smoke test.
-
-## Releases
-
-Releases are automated from merges to `main` using release-please. When releasable changes are detected, release-please opens or updates a release PR; once that release PR is merged, a new version tag is created and the publish workflow builds artifacts and updates the Homebrew tap.
-
 ## Quick start
 
 ```bash
@@ -65,7 +59,7 @@ kaddons -o html --output-path ./kaddons-report.html
 kaddons -a cert-manager,karpenter -o html
 
 # Override cluster version
-kaddons -c 1.30
+kaddons -c 1.34
 
 # Filter by namespace
 kaddons -n kube-system -o html
@@ -101,14 +95,6 @@ kaddons -n kube-system -o html
       "note": "The compatibility matrix at https://cert-manager.io/docs/releases/ states v1.14 supports K8s 1.24-1.31. Supported until 2025-09-10."
     },
     {
-      "name": "external-secrets",
-      "namespace": "external-secrets",
-      "installed_version": "v0.14.2",
-      "compatible": "false",
-      "latest_compatible_version": "0.13.x",
-      "note": "Upgrade required: https://external-secrets.io/latest/introduction/stability-support/ states ESO 0.14.x only supports K8s 1.32."
-    },
-    {
       "name": "goldilocks",
       "namespace": "kube-system",
       "installed_version": "8.0.0",
@@ -126,8 +112,8 @@ The `compatible` field is a tri-state string:
 - `"unknown"` — compatibility could not be determined
 
 The `data_source` field shows where the verdict came from:
-- `"stored"` — deterministic resolver from embedded `kubernetes_compatibility`/`kubernetes_min_version`
-- `"llm"` — runtime Gemini analysis of fetched compatibility evidence
+- `"stored"` — deterministic resolver from local stored db
+- `"llm"` — runtime Gemini analysis of local stored db and fetched compatibility evidence
 
 The `note` field always cites its source URL and includes support-until dates when available.
 
@@ -136,23 +122,6 @@ The `note` field always cites its source URL and includes support-until dates wh
 Writes a styled report to `./kaddons-report.html` by default (or to `--output-path` if specified). JSON output remains the default for stdout pipelines.
 
 ![HTML report example](docs/images/kaddons-report-example.png)
-
-## Database validation (development tool)
-
-A separate `kaddons-validate` binary checks the addon database for URL health and compatibility matrix content. It is not shipped with releases — it's a development and CI tool.
-
-```bash
-go run ./cmd/kaddons-validate              # Run live checks (default)
-go run ./cmd/kaddons-validate --stored-only # Stored-data validation only (no network)
-go run ./cmd/kaddons-validate --links      # Only reachability checks
-go run ./cmd/kaddons-validate --matrix     # Only content validation
-make validate                              # Stored-data validation only (deterministic)
-make validate-live                         # Full live validation (links + matrix content)
-```
-
-Exit codes: `0` all checks passed, `1` validation failures found, `2` runtime error.
-
-A [GitHub Actions workflow](.github/workflows/linkcheck.yml) runs link checks weekly and creates issues for broken links. See [docs/ci-cd.md](docs/ci-cd.md).
 
 ## Accuracy and limitations
 
@@ -168,12 +137,6 @@ The LLM reads each addon's official compatibility page and extracts version supp
 | [docs/ci-cd.md](docs/ci-cd.md) | CI pipeline, release process, automated link checking |
 | [docs/contributing.md](docs/contributing.md) | Development setup, testing, project structure |
 | [AGENTS.md](AGENTS.md) | Coding agent instructions for this repository |
-
-## Testing
-
-```bash
-go test -v -race ./...
-```
 
 ## License
 
