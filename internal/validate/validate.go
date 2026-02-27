@@ -159,6 +159,8 @@ func validateStoredData(addons []addon.Addon) []storedDataProblem {
 			}
 		}
 
+		supportedCompatibilityKeyCount := 0
+		nonEmptyCompatibilityKeyCount := 0
 		for key, versions := range a.KubernetesCompatibility {
 			if key == "" {
 				problems = append(problems, storedDataProblem{
@@ -168,6 +170,10 @@ func validateStoredData(addons []addon.Addon) []storedDataProblem {
 					reason:    "addon version key must be non-empty",
 				})
 				continue
+			}
+			nonEmptyCompatibilityKeyCount++
+			if isResolverSupportedCompatibilityKey(key) {
+				supportedCompatibilityKeyCount++
 			}
 			if len(versions) == 0 {
 				problems = append(problems, storedDataProblem{
@@ -189,9 +195,86 @@ func validateStoredData(addons []addon.Addon) []storedDataProblem {
 				}
 			}
 		}
+		if nonEmptyCompatibilityKeyCount > 0 && supportedCompatibilityKeyCount == 0 {
+			problems = append(problems, storedDataProblem{
+				addonName: a.Name,
+				field:     "kubernetes_compatibility",
+				value:     "(all keys unsupported)",
+				reason:    "matrix must contain at least one key format supported by stored resolver",
+			})
+		}
 	}
 
 	return problems
+}
+
+func isResolverSupportedCompatibilityKey(rawKey string) bool {
+	normalizedKey := strings.ToLower(strings.TrimSpace(rawKey))
+	if normalizedKey == "" {
+		return false
+	}
+
+	if leftRangeKey, rightRangeKey, isRangeKey := parseCompatibilityRangeKey(normalizedKey); isRangeKey {
+		return isNumericVersionToken(leftRangeKey) && isNumericVersionToken(rightRangeKey)
+	}
+
+	normalizedKey = strings.TrimPrefix(normalizedKey, ">=")
+	normalizedKey = strings.TrimPrefix(normalizedKey, "v")
+	normalizedKey = strings.TrimSuffix(normalizedKey, "+")
+	if normalizedKey == "" {
+		return false
+	}
+
+	if strings.HasSuffix(normalizedKey, ".x") {
+		return isNumericVersionToken(strings.TrimSuffix(normalizedKey, ".x"))
+	}
+
+	// Accept semver-like pre-release keys (for example: 1.5.0-rc1).
+	if hyphenIndex := strings.Index(normalizedKey, "-"); hyphenIndex > 0 {
+		normalizedKey = normalizedKey[:hyphenIndex]
+	}
+
+	return isNumericVersionToken(normalizedKey)
+}
+
+func parseCompatibilityRangeKey(rawKey string) (leftKey string, rightKey string, isRange bool) {
+	hyphenIndex := strings.Index(rawKey, "-")
+	if hyphenIndex <= 0 || hyphenIndex >= len(rawKey)-1 {
+		return "", "", false
+	}
+
+	leftKey = strings.TrimPrefix(strings.TrimSpace(rawKey[:hyphenIndex]), "v")
+	rightKey = strings.TrimPrefix(strings.TrimSpace(rawKey[hyphenIndex+1:]), "v")
+	if leftKey == "" || rightKey == "" {
+		return "", "", false
+	}
+
+	return leftKey, rightKey, true
+}
+
+func isNumericVersionToken(rawToken string) bool {
+	if rawToken == "" {
+		return false
+	}
+	if rawToken[0] < '0' || rawToken[0] > '9' {
+		return false
+	}
+	if !strings.Contains(rawToken, ".") {
+		return false
+	}
+
+	segments := strings.Split(rawToken, ".")
+	for _, segment := range segments {
+		if segment == "" {
+			return false
+		}
+		for _, character := range segment {
+			if character < '0' || character > '9' {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // compareK8sMinorVersions compares two "X.Y" version strings numerically.

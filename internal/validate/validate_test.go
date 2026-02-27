@@ -507,6 +507,56 @@ func TestValidateStoredData_NoStoredData(t *testing.T) {
 	}
 }
 
+func TestValidateStoredData_UnsupportedKeysOnly(t *testing.T) {
+	addons := []addon.Addon{
+		{
+			Name: "unsupported-only",
+			KubernetesCompatibility: map[string][]string{
+				"master": {"1.31"},
+			},
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 1 {
+		t.Fatalf("expected 1 problem, got %d: %+v", len(problems), problems)
+	}
+	if problems[0].reason != "matrix must contain at least one key format supported by stored resolver" {
+		t.Fatalf("unexpected reason: %q", problems[0].reason)
+	}
+}
+
+func TestValidateStoredData_MixedKeysAtLeastOneSupported(t *testing.T) {
+	addons := []addon.Addon{
+		{
+			Name: "mixed-keys",
+			KubernetesCompatibility: map[string][]string{
+				"master": {"1.31"},
+				"1.13.x": {"1.31"},
+			},
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 0 {
+		t.Fatalf("expected 0 problems, got %d: %+v", len(problems), problems)
+	}
+}
+
+func TestValidateStoredData_SupportedRangeAndThresholdPlusKeys(t *testing.T) {
+	addons := []addon.Addon{
+		{
+			Name: "advanced-keys",
+			KubernetesCompatibility: map[string][]string{
+				"v2.0.0-v2.1.3": {"1.31"},
+				"v2.5.0+":       {"1.31"},
+			},
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 0 {
+		t.Fatalf("expected 0 problems, got %d: %+v", len(problems), problems)
+	}
+}
+
 func TestValidateStoredData_ValidMaxVersion(t *testing.T) {
 	addons := []addon.Addon{
 		{
