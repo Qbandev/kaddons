@@ -691,7 +691,7 @@ func resolveLocalOnly(addons []addonWithInfo, k8sVersion string) []output.AddonC
 		note := "LLM analysis not configured"
 		if len(info.EOLData) > 0 {
 			latest := info.EOLData[0]
-			note += fmt.Sprintf(". latest release: %s (cycle %s)", latest.Latest, latest.Cycle)
+			note += fmt.Sprintf(". Latest release: %s (cycle %s)", latest.Latest, latest.Cycle)
 		}
 		if info.DBMatch != nil {
 			note = appendSourceReference(note, info.DBMatch.CompatibilityMatrixURL)
