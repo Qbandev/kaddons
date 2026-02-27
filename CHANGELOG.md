@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/Qbandev/kaddons/compare/v0.2.2...v0.3.0) (2026-02-27)
+
+
+### Features
+
+* make LLM optional with local-only fallback ([#20](https://github.com/Qbandev/kaddons/issues/20)) ([9a2ade3](https://github.com/Qbandev/kaddons/commit/9a2ade3e43c1cee87e2094f4faeadd6049a2e02c))
+
 ## [0.2.2](https://github.com/Qbandev/kaddons/compare/v0.2.1...v0.2.2) (2026-02-27)
 
 
