@@ -107,8 +107,6 @@ release-please accumulates changes into a release PR. When the release PR is mer
 `RELEASE_PLEASE_TOKEN` (PAT) is required so release PRs trigger CI checks.
 `HOMEBREW_TAP_TOKEN` (PAT) is required because Homebrew publishing writes formula updates to the external `qbandev/homebrew-tap` repository.
 
-**Release immutability** is enabled on this repository. Once a release is published, its tag and assets cannot be modified or reused — even if the release is later deleted.
-
 ### Changelog
 
 release-please generates and maintains `CHANGELOG.md` from conventional commit messages. GoReleaser's changelog is disabled to avoid duplication.
