@@ -81,7 +81,7 @@ func run(cacheRootPath string, workerCount int, filters []string) error {
 
 	addons := filterAddons(allAddons, filters)
 	if len(addons) == 0 {
-		return fmt.Errorf("no addons matched filter %q (total in DB: %d)", filters, len(allAddons))
+		return fmt.Errorf("no addons matched filter %s (total in DB: %d)", strings.Join(filters, ", "), len(allAddons))
 	}
 
 	pagesCacheDirectory := filepath.Join(cacheRootPath, "pages")
