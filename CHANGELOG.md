@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/Qbandev/kaddons/compare/v0.2.0...v0.2.1) (2026-02-27)
+
+
+### Bug Fixes
+
+* use supported Homebrew directory key in GoReleaser ([#15](https://github.com/Qbandev/kaddons/issues/15)) ([854e2fe](https://github.com/Qbandev/kaddons/commit/854e2fe58bb09c3111d3eff5867a5a53e5d9c179))
+
 ## [0.2.0](https://github.com/Qbandev/kaddons/compare/v0.1.0...v0.2.0) (2026-02-27)
 
 
