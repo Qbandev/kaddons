@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/Qbandev/kaddons/compare/v0.2.1...v0.2.2) (2026-02-27)
+
+
+### Bug Fixes
+
+* let goreleaser own GitHub release creation ([#17](https://github.com/Qbandev/kaddons/issues/17)) ([db38f10](https://github.com/Qbandev/kaddons/commit/db38f1052e052113a2822be615b44b8cdb968ae2))
+
 ## [0.2.1](https://github.com/Qbandev/kaddons/compare/v0.2.0...v0.2.1) (2026-02-27)
 
 
