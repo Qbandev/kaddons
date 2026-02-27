@@ -131,6 +131,7 @@ func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addo
 
 	// Fetch compatibility pages and EOL data for addons without stored data
 	fmt.Fprintf(os.Stderr, "Enriching %d addons (runtime)...\n", len(runtimeAddons))
+	hasAPIKey := strings.TrimSpace(apiKey) != ""
 	runtimeEOLSlugLookup := make(map[string]string)
 	if len(runtimeAddons) > 0 {
 		products, err := fetch.EOLProducts(ctx)
@@ -147,15 +148,18 @@ func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addo
 		info := entry.info
 		if info.DBMatch.CompatibilityMatrixURL != "" {
 			info.CompatibilityURL = info.DBMatch.CompatibilityMatrixURL
-			if cached, ok := fetchedURLs[info.CompatibilityURL]; ok {
-				info.CompatibilityContent = cached
-			} else {
-				content, err := fetch.CompatibilityPage(ctx, info.DBMatch.CompatibilityMatrixURL)
-				if err != nil {
-					info.FetchError = err.Error()
+			// Skip compatibility page HTTP fetches when no API key — the LLM is the only consumer of this content
+			if hasAPIKey {
+				if cached, ok := fetchedURLs[info.CompatibilityURL]; ok {
+					info.CompatibilityContent = cached
 				} else {
-					info.CompatibilityContent = content
-					fetchedURLs[info.CompatibilityURL] = content
+					content, err := fetch.CompatibilityPage(ctx, info.DBMatch.CompatibilityMatrixURL)
+					if err != nil {
+						info.FetchError = err.Error()
+					} else {
+						info.CompatibilityContent = content
+						fetchedURLs[info.CompatibilityURL] = content
+					}
 				}
 			}
 		}
@@ -171,19 +175,17 @@ func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addo
 	}
 
 	if len(enriched) == 0 && len(storedResults) == 0 {
-		if _, err := output.FormatOutput("[]", k8sVersion, outputFormat, outputPath); err != nil {
-			return err
-		}
-		fmt.Fprintf(os.Stderr, "Done: %d compatible, %d incompatible, %d unknown\n", 0, 0, 0)
-		return nil
+		return emitResults(k8sVersion, []output.AddonCompatibility{}, outputFormat, outputPath)
 	}
 
 	// Phase 3: LLM analysis — only for runtime addons
+	if len(enriched) > 0 && !hasAPIKey {
+		fmt.Fprintf(os.Stderr, "No Gemini API key configured. Producing local-only results for %d addons.\n", len(enriched))
+		localResults := resolveLocalOnly(enriched, k8sVersion)
+		return emitResults(k8sVersion, append(storedResults, localResults...), outputFormat, outputPath)
+	}
 	var client *genai.Client
 	if len(enriched) > 0 {
-		if strings.TrimSpace(apiKey) == "" {
-			return fmt.Errorf("gemini API key is required: set GEMINI_API_KEY env var or use --key flag")
-		}
 		client, err = genai.NewClient(ctx, &genai.ClientConfig{
 			APIKey:  apiKey,
 			Backend: genai.BackendGeminiAPI,
@@ -654,6 +656,58 @@ func appendSourceReference(note string, sourceURL string) string {
 	return fmt.Sprintf("%s Source: %s", note, sourceURL)
 }
 
+// emitResults marshals results to JSON, formats output, and prints the summary line to stderr.
+func emitResults(k8sVersion string, results []output.AddonCompatibility, outputFormat string, outputPath string) error {
+	resultsJSON, err := json.Marshal(results)
+	if err != nil {
+		return fmt.Errorf("marshaling results: %w", err)
+	}
+	formattedResults, err := output.FormatOutput(string(resultsJSON), k8sVersion, outputFormat, outputPath)
+	if err != nil {
+		return err
+	}
+
+	var compatible, incompatible, unknown int
+	for _, result := range formattedResults {
+		switch result.Compatible {
+		case output.StatusTrue:
+			compatible++
+		case output.StatusFalse:
+			incompatible++
+		default:
+			unknown++
+		}
+	}
+	fmt.Fprintf(os.Stderr, "Done: %d compatible, %d incompatible, %d unknown\n", compatible, incompatible, unknown)
+	return nil
+}
+
+// resolveLocalOnly produces local-only verdicts for addons that need runtime
+// analysis but no LLM is configured. Each result gets compatible="unknown"
+// and data_source="local" with a note built from available local data.
+func resolveLocalOnly(addons []addonWithInfo, k8sVersion string) []output.AddonCompatibility {
+	results := make([]output.AddonCompatibility, 0, len(addons))
+	for _, info := range addons {
+		note := "LLM analysis not configured"
+		if len(info.EOLData) > 0 {
+			latest := info.EOLData[0]
+			note += fmt.Sprintf(". Latest release: %s (cycle %s)", latest.Latest, latest.Cycle)
+		}
+		if info.DBMatch != nil {
+			note = appendSourceReference(note, info.DBMatch.CompatibilityMatrixURL)
+		}
+		results = append(results, output.AddonCompatibility{
+			Name:             info.Name,
+			Namespace:        info.Namespace,
+			InstalledVersion: info.Version,
+			Compatible:       output.StatusUnknown,
+			DataSource:       output.DataSourceLocal,
+			Note:             note,
+		})
+	}
+	return results
+}
+
 func isPatchLevelKeyCompatible(matrixKey string, installedVersion string) bool {
 	if !isSimpleSemverTriplet(matrixKey) {
 		return false
@@ -788,29 +842,7 @@ func analyzeCompatibility(ctx context.Context, client *genai.Client, model strin
 		results = append(results, result)
 	}
 
-	resultsJSON, err := json.Marshal(results)
-	if err != nil {
-		return fmt.Errorf("marshaling linear analysis results: %w", err)
-	}
-	formattedResults, err := output.FormatOutput(string(resultsJSON), k8sVersion, outputFormat, outputPath)
-	if err != nil {
-		return err
-	}
-
-	var compatible, incompatible, unknown int
-	for _, result := range formattedResults {
-		switch result.Compatible {
-		case output.StatusTrue:
-			compatible++
-		case output.StatusFalse:
-			incompatible++
-		default:
-			unknown++
-		}
-	}
-	fmt.Fprintf(os.Stderr, "Done: %d compatible, %d incompatible, %d unknown\n", compatible, incompatible, unknown)
-
-	return nil
+	return emitResults(k8sVersion, results, outputFormat, outputPath)
 }
 
 type singleAddonAnalysisInput struct {

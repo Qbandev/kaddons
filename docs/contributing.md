@@ -6,7 +6,7 @@
 
 - Go 1.25.7+
 - `kubectl` (for integration testing against a cluster)
-- A Gemini API key (only needed for the main command, not tests)
+- (Optional) A Gemini API key (only needed for LLM analysis in the main command, not tests)
 
 **Clone and build:**
 
@@ -37,15 +37,21 @@ internal/
     k8s_universal_addons.json         Addon database (668 entries, embedded via go:embed)
   agent/
     agent.go                          Plan-and-Execute pipeline (discovery → enrichment → analysis)
+    evidence_test.go                  Stored data resolution, local-only fallback, evidence pruning tests
   cluster/
     cluster.go                        kubectl interaction, version detection, workload discovery
     cluster_test.go                   Chart version, image tag extraction tests
   fetch/
     fetch.go                          HTTP fetching, GitHub raw URL conversion, EOL data
     fetch_test.go                     GitHub URL conversion tests
+    url_policy.go                     URL domain allowlist policy
+    url_policy_test.go                URL policy validation tests
   output/
-    output.go                         JSON/HTML formatting, Status type
+    output.go                         JSON/HTML formatting, Status type, data_source constants
     output_test.go                    Status type, JSON formatting, backward compat tests
+  resilience/
+    retry.go                          Shared retry policy, deterministic backoff, retry classifiers
+    retry_test.go                     Retry policy and retry behavior tests
   validate/
     validate.go                       URL reachability + matrix content validation library
     validate_test.go                  URL check, matrix detection, aggregation, flag tests
@@ -59,8 +65,11 @@ Makefile                              Build, install, clean targets
 Tests are table-driven and do not require cluster access or API keys. They cover:
 
 - **Addon matching** (`internal/addon/addon_test.go`) — exact match, normalization, role suffix stripping, word-subset matching, alias resolution, EOL slug lookup, version cycle matching
+- **Agent logic** (`internal/agent/evidence_test.go`) — stored data resolution, local-only fallback, evidence pruning, matrix key matching, version comparison, threshold compatibility
 - **URL conversion** (`internal/fetch/fetch_test.go`) — GitHub→raw conversion for all URL patterns (repo root, blob, tree, wiki, releases, non-GitHub)
-- **Output formatting** (`internal/output/output_test.go`) — Status tri-state unmarshaling (bool, string, null, garbage), JSON round-trips, backward compatibility
+- **URL policy** (`internal/fetch/url_policy_test.go`) — domain allowlist policy validation
+- **Output formatting** (`internal/output/output_test.go`) — Status tri-state unmarshaling (bool, string, null, garbage), JSON round-trips, data_source values, HTML rendering
+- **Resilience** (`internal/resilience/retry_test.go`) — retry policy, deterministic backoff, retry classifiers
 - **Validation** (`internal/validate/validate_test.go`) — HTTP HEAD/GET fallback, error codes, User-Agent header, matrix detection heuristic, URL aggregation, flag logic
 - **Cluster interaction** (`internal/cluster/cluster_test.go`) — chart version stripping, version extraction, image tag parsing
 

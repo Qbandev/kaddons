@@ -645,6 +645,88 @@ func TestResolveFromStoredData_ThresholdPlusKey(t *testing.T) {
 	}
 }
 
+func TestResolveLocalOnly_ProducesUnknownWithLocalSource(t *testing.T) {
+	addons := []addonWithInfo{
+		{
+			DetectedAddon: cluster.DetectedAddon{
+				Name:      "goldilocks",
+				Namespace: "kube-system",
+				Version:   "8.0.0",
+			},
+			DBMatch: &addon.Addon{
+				Name:                   "Goldilocks",
+				CompatibilityMatrixURL: "https://example.com/docs/compat",
+			},
+			EOLData: []addon.EOLCycle{
+				{Cycle: "8.0", Latest: "v8.0.2", EOL: false, ReleaseDate: "2025-01-15"},
+			},
+		},
+	}
+
+	results := resolveLocalOnly(addons, "1.30")
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	r := results[0]
+	if r.Compatible != output.StatusUnknown {
+		t.Errorf("expected compatible=unknown, got %q", r.Compatible)
+	}
+	if r.DataSource != output.DataSourceLocal {
+		t.Errorf("expected data_source=local, got %q", r.DataSource)
+	}
+	if !strings.Contains(r.Note, "LLM analysis not configured") {
+		t.Errorf("expected note to contain 'LLM analysis not configured', got %q", r.Note)
+	}
+	if !strings.Contains(r.Note, "v8.0.2") {
+		t.Errorf("expected note to contain latest release version, got %q", r.Note)
+	}
+	if !strings.Contains(r.Note, "cycle 8.0") {
+		t.Errorf("expected note to contain cycle info, got %q", r.Note)
+	}
+	if !strings.Contains(r.Note, "https://example.com/docs/compat") {
+		t.Errorf("expected note to contain source URL, got %q", r.Note)
+	}
+	if r.LatestCompatibleVersion != "" {
+		t.Errorf("expected empty latest_compatible_version, got %q", r.LatestCompatibleVersion)
+	}
+}
+
+func TestResolveLocalOnly_MinimalAddon(t *testing.T) {
+	addons := []addonWithInfo{
+		{
+			DetectedAddon: cluster.DetectedAddon{
+				Name:      "unknown-addon",
+				Namespace: "default",
+				Version:   "1.0.0",
+			},
+			DBMatch: &addon.Addon{
+				Name: "unknown-addon",
+			},
+		},
+	}
+
+	results := resolveLocalOnly(addons, "1.30")
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	r := results[0]
+	if r.Compatible != output.StatusUnknown {
+		t.Errorf("expected compatible=unknown, got %q", r.Compatible)
+	}
+	if r.DataSource != output.DataSourceLocal {
+		t.Errorf("expected data_source=local, got %q", r.DataSource)
+	}
+	if r.Note != "LLM analysis not configured" {
+		t.Errorf("expected minimal note, got %q", r.Note)
+	}
+	if r.Name != "unknown-addon" {
+		t.Errorf("expected name=unknown-addon, got %q", r.Name)
+	}
+	if r.InstalledVersion != "1.0.0" {
+		t.Errorf("expected installed_version=1.0.0, got %q", r.InstalledVersion)
+	}
+}
+
 func TestResolveFromStoredData_PatchLineCompatibility(t *testing.T) {
 	info := addonWithInfo{
 		DetectedAddon: cluster.DetectedAddon{

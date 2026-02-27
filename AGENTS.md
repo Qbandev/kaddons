@@ -4,7 +4,7 @@ Coding agent instructions for the kaddons repository.
 
 ## Project overview
 
-kaddons is a Go CLI tool that checks Kubernetes addon compatibility. It discovers addons running in a cluster, matches them against a 668-entry embedded database, fetches their compatibility pages, and uses a single Gemini LLM call to determine K8s version compatibility.
+kaddons is a Go CLI tool that checks Kubernetes addon compatibility. It discovers addons running in a cluster, matches them against a 668-entry embedded database, and optionally uses Gemini LLM to analyze compatibility pages for addons without stored data. Works without an API key using local-only fallback.
 
 ## Architecture
 
@@ -12,7 +12,7 @@ Three-phase Plan-and-Execute pipeline:
 
 1. **Discovery** (deterministic) — `kubectl` queries for cluster version and workloads
 2. **Enrichment** (deterministic) — database matching, compatibility page fetching, EOL data
-3. **Analysis** (single LLM call) — Gemini interprets fetched pages and returns verdicts
+3. **Analysis** (optional LLM call) — Gemini interprets fetched pages and returns verdicts; falls back to local-only results when no API key
 
 The LLM is only used in Phase 3. Phases 1 and 2 are fully deterministic.
 
@@ -34,7 +34,7 @@ The LLM is only used in Phase 3. Phases 1 and 2 are fully deterministic.
 
 - **Go** (1.25.6) — single-binary CLI, no CGO
 - **Dependencies**: `spf13/cobra` (CLI), `google.golang.org/genai` (Gemini API)
-- **No config files** — flags and `GEMINI_API_KEY` env var only
+- **No config files** — flags and optional `GEMINI_API_KEY` env var only
 - **CI**: GitHub Actions (test, lint, security scan, release via GoReleaser)
 
 ## Build and test
@@ -79,7 +79,7 @@ The Gemini model sometimes returns booleans instead of strings, or wraps JSON in
 
 ### Adding an addon to the database
 
-1. Add entry to `internal/addon/k8s_universal_addons.json` with all six fields
+1. Add entry to `internal/addon/k8s_universal_addons.json` with all five required fields
 2. `compatibility_matrix_url` should point to a page with actual K8s version data
 3. Verify: `go build ./...`, `make validate`, `go test -v ./...`
 

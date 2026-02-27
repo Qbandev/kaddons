@@ -40,6 +40,7 @@ func (s *Status) UnmarshalJSON(data []byte) error {
 const (
 	DataSourceStored  = "stored"
 	DataSourceRuntime = "llm"
+	DataSourceLocal   = "local"
 )
 
 // AddonCompatibility represents the compatibility verdict for a single addon.
@@ -145,6 +146,9 @@ func writeHTMLReport(addons []AddonCompatibility, k8sVersion string, outputPath 
 		case DataSourceRuntime:
 			row.DataSourceClass = "source-llm"
 			row.DataSourceLabel = "llm"
+		case DataSourceLocal:
+			row.DataSourceClass = "source-local"
+			row.DataSourceLabel = "local"
 		default:
 			row.DataSourceClass = "source-llm"
 			row.DataSourceLabel = "llm"
@@ -225,6 +229,7 @@ const htmlTemplate = `<!DOCTYPE html>
     .status-unknown { color:#d29922; border-color:#6f5a1a; background:#252218; }
     .source-stored { color:#a5d6ff; border-color:#1f4a7a; background:#0d2240; }
     .source-llm { color:#9fb0c3; border-color:#2b3541; background:#161b22; }
+    .source-local { color:#d2a8ff; border-color:#553d7a; background:#1c1336; }
     .muted { color:#9fb0c3; }
   </style>
 </head>

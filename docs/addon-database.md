@@ -28,6 +28,9 @@ The addon database is an embedded JSON file (`internal/addon/k8s_universal_addon
 | `repository` | Yes | Source code repository |
 | `compatibility_matrix_url` | Yes | Page containing K8s version compatibility data |
 | `changelog_location` | Yes | Release notes or changelog URL |
+| `kubernetes_compatibility` | No | Map of addon version → supported K8s versions (enables stored-data resolution without LLM) |
+| `kubernetes_min_version` | No | Minimum supported K8s version (floor check fallback) |
+| `kubernetes_max_version` | No | Maximum supported K8s version (ceiling check fallback) |
 
 ## Matching algorithm
 
@@ -55,7 +58,7 @@ A subset of addons have mappings to [endoflife.date](https://endoflife.date) pro
 - Redis, Traefik
 - kube-proxy (maps to Kubernetes release cycle)
 
-When a matched addon has an EOL slug, kaddons fetches lifecycle data from the endoflife.date API. This provides the LLM with support dates, latest versions, and EOL status per release cycle.
+When a matched addon has an EOL slug, kaddons fetches lifecycle data from the endoflife.date API. This provides support dates, latest versions, and EOL status per release cycle — used by the LLM when configured, and included in local-only notes when no API key is present.
 
 ## GitHub URL handling
 
