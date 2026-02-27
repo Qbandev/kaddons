@@ -422,6 +422,59 @@ func TestFormatOutput_HTMLLinkifiesNotesURLsInNewWindow(t *testing.T) {
 	}
 }
 
+func TestAddonCompatibility_DataSourceLocalRoundTrip(t *testing.T) {
+	original := []AddonCompatibility{
+		{
+			Name:             "test-local",
+			Namespace:        "kube-system",
+			InstalledVersion: "v1.0.0",
+			Compatible:       StatusUnknown,
+			Note:             "LLM analysis not configured",
+			DataSource:       DataSourceLocal,
+		},
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+
+	var decoded []AddonCompatibility
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+
+	if decoded[0].DataSource != DataSourceLocal {
+		t.Errorf("addon[0].data_source = %q, want %q", decoded[0].DataSource, DataSourceLocal)
+	}
+	if decoded[0].Compatible != StatusUnknown {
+		t.Errorf("addon[0].compatible = %q, want %q", decoded[0].Compatible, StatusUnknown)
+	}
+}
+
+func TestFormatOutput_HTMLContainsLocalSourceColumn(t *testing.T) {
+	tempDir := t.TempDir()
+	reportPath := filepath.Join(tempDir, "local-source-report.html")
+	raw := `[{"name":"local-addon","namespace":"default","installed_version":"v1.0.0","compatible":"unknown","data_source":"local","note":"LLM analysis not configured"}]`
+
+	_, err := FormatOutput(raw, "1.31", "html", reportPath)
+	if err != nil {
+		t.Fatalf("FormatOutput(html) error = %v", err)
+	}
+
+	data, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatalf("reading report: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "source-local") {
+		t.Error("HTML report missing source-local class")
+	}
+	if !strings.Contains(content, ">local<") {
+		t.Error("HTML report missing 'local' label text")
+	}
+}
+
 func TestFormatOutput_InvalidFormatReturnsError(t *testing.T) {
 	raw := `[{"name":"a","namespace":"ns","installed_version":"v1","compatible":"true","note":"ok"}]`
 	_, err := FormatOutput(raw, "1.30", "table", "")

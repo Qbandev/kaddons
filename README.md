@@ -11,7 +11,7 @@ kaddons uses a three-phase **Plan-and-Execute** pipeline. Phases 1 and 2 are ful
 ```
 Phase 1: Discovery        kubectl → detect K8s version + installed workloads
 Phase 2: Enrichment       Match against 668-addon DB, resolve stored matrix data first
-Phase 3: Analysis         Gemini calls only for addons unresolved by stored data
+Phase 3: Analysis         Gemini calls only for addons unresolved by stored data (optional; local-only fallback when no API key)
 ```
 
 See [docs/architecture.md](docs/architecture.md) for the full data flow.
@@ -19,7 +19,7 @@ See [docs/architecture.md](docs/architecture.md) for the full data flow.
 ## Prerequisites
 
 - `kubectl` configured with cluster access
-- A [Gemini API key](https://aistudio.google.com/apikey) when runtime LLM analysis is needed
+- (Optional) A [Gemini API key](https://aistudio.google.com/apikey) for runtime LLM analysis of addons without stored data
 
 ## Install
 
@@ -47,9 +47,11 @@ make build
 ## Quick start
 
 ```bash
-export GEMINI_API_KEY=your-key-here
+# Scan all addons without an API key (local-only results for unresolved addons)
+kaddons
 
-# Scan all addons (JSON output)
+# With Gemini AI for full LLM analysis
+export GEMINI_API_KEY=your-key-here
 kaddons
 
 # HTML report output
@@ -114,6 +116,7 @@ The `compatible` field is a tri-state string:
 The `data_source` field shows where the verdict came from:
 - `"stored"` — deterministic resolver from local stored db
 - `"llm"` — runtime Gemini analysis of local stored db and fetched compatibility evidence
+- `"local"` — no LLM configured; result based on available local data only
 
 The `note` field always cites its source URL and includes support-until dates when available.
 

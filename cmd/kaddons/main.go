@@ -30,7 +30,7 @@ func main() {
 		Use:           "kaddons",
 		Version:       fmt.Sprintf("%s (commit: %s, date: %s)", version, commit, date),
 		Short:         "Kubernetes addon compatibility checker",
-		Long:          "Discovers addons installed in a Kubernetes cluster and checks their compatibility with the cluster's Kubernetes version using Gemini AI.",
+		Long:          "Discovers addons installed in a Kubernetes cluster and checks their compatibility with the cluster's Kubernetes version. Optionally uses Gemini AI for addons without stored data.",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -51,7 +51,7 @@ func main() {
 	rootCmd.Flags().StringVarP(&namespace, "namespace", "n", "", "Kubernetes namespace filter (empty for all namespaces)")
 	rootCmd.Flags().StringVarP(&k8sVersion, "cluster", "c", "", "Kubernetes version override (e.g. 1.30)")
 	rootCmd.Flags().StringVarP(&addonsFilter, "addons", "a", "", "Comma-separated addon name filter")
-	rootCmd.Flags().StringVarP(&apiKey, "key", "k", "", "Gemini API key (overrides GEMINI_API_KEY env, prefer env var to avoid exposure in process listings)")
+	rootCmd.Flags().StringVarP(&apiKey, "key", "k", "", "Gemini API key (optional; overrides GEMINI_API_KEY env var)")
 	rootCmd.Flags().StringVarP(&model, "model", "m", "gemini-3-flash-preview", "Gemini model to use")
 	rootCmd.Flags().StringVarP(&output, "output", "o", "json", "Output format: json or html")
 	rootCmd.Flags().StringVar(&outputPath, "output-path", "./kaddons-report.html", "Output file path when --output=html")

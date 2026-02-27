@@ -6,7 +6,7 @@ kaddons is configured entirely through CLI flags and environment variables. Ther
 
 | Variable | Description |
 |----------|-------------|
-| `GEMINI_API_KEY` | Gemini API key. Used when `--key` flag is not provided. Required only when at least one addon requires runtime LLM analysis; not needed for `kaddons-validate`. |
+| `GEMINI_API_KEY` | Gemini API key (optional). Used when `--key` flag is not provided. Enables runtime LLM analysis for addons without stored data. When unset, unresolved addons receive `compatible="unknown"` with `data_source="local"`. Not needed for `kaddons-validate`. |
 
 ## Root command flags
 
@@ -19,7 +19,7 @@ kaddons [flags]
 | `--namespace` | `-n` | `""` | Filter workloads by Kubernetes namespace. Empty means all namespaces. |
 | `--cluster` | `-c` | `""` | Override cluster version detection. Skips `kubectl version` call. Format: `1.30` |
 | `--addons` | `-a` | `""` | Comma-separated addon name filter. Only matched addons with these names are analyzed. |
-| `--key` | `-k` | `""` | Gemini API key. Overrides `GEMINI_API_KEY` env var. |
+| `--key` | `-k` | `""` | Gemini API key (optional). Overrides `GEMINI_API_KEY` env var. When not provided, unresolved addons produce local-only results. |
 | `--model` | `-m` | `gemini-3-flash-preview` | Gemini model to use for compatibility analysis. |
 | `--output` | `-o` | `json` | Output format. Must be `json` or `html`. |
 | `--output-path` | | `./kaddons-report.html` | Output file path used when `--output html` is selected. |
@@ -76,7 +76,7 @@ Default format (`-o json`). Returns a `CompatibilityReport` object:
 | `installed_version` | string | Version detected from cluster labels/images |
 | `compatible` | string | `"true"`, `"false"`, or `"unknown"` |
 | `latest_compatible_version` | string | Recommended version (omitted if not determined) |
-| `data_source` | string | Verdict source: `"stored"` or `"llm"` |
+| `data_source` | string | Verdict source: `"stored"`, `"llm"`, or `"local"` (no API key configured) |
 | `note` | string | Source-cited explanation with URL and support dates |
 
 The `compatible` field is always a JSON string, never a boolean or null. This is enforced by the `Status` type's custom `UnmarshalJSON` which normalizes LLM output.
@@ -103,6 +103,19 @@ Done: 8 compatible, 2 incompatible, 2 unknown
 ```
 
 The `Done: ...` summary is printed as the final stderr line after output is fully written.
+
+When no API key is configured, the progress output skips the LLM analysis stage:
+
+```
+Detecting cluster version...
+Cluster version: 1.30
+Discovered 47 workloads
+Matched 12 known addons
+Resolved cert-manager from stored data -> true
+Enriching 4 addons (runtime)...
+No Gemini API key configured. Producing local-only results for 4 addons.
+Done: 8 compatible, 0 incompatible, 4 unknown
+```
 
 Gemini analysis is executed one addon at a time in deterministic sorted order under the same `Analyzing with ...` stage.
 

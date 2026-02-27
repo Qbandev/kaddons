@@ -135,6 +135,17 @@ If per-addon analysis fails after bounded retries/timeouts, that addon is emitte
 
 Runtime verdicts are tagged with `data_source="llm"`.
 
+### Local-only mode
+
+When no Gemini API key is configured (`GEMINI_API_KEY` unset and `--key` not provided), Phase 3 skips LLM analysis entirely. Instead, addons that require runtime resolution receive:
+
+- `compatible = "unknown"`, `data_source = "local"`
+- A note built from available local data: EOL latest release info and the compatibility matrix URL from the database
+
+Compatibility page HTTP fetches are also skipped in this mode since the LLM is the only consumer of that content. EOL data fetching still runs because it provides structured data (latest version, EOL status) useful without LLM interpretation. The compatibility URL remains available from the embedded database (`info.DBMatch.CompatibilityMatrixURL`) and is included in the note as a source reference.
+
+This allows `kaddons` to run to completion without any API key, producing deterministic stored-data results plus `"unknown"` local-only results for unresolved addons.
+
 ### Response processing
 
 1. Text is extracted from each Gemini response
