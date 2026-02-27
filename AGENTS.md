@@ -79,7 +79,7 @@ The Gemini model sometimes returns booleans instead of strings, or wraps JSON in
 
 ### Adding an addon to the database
 
-1. Add entry to `internal/addon/k8s_universal_addons.json` with all six fields
+1. Add entry to `internal/addon/k8s_universal_addons.json` with all five required fields
 2. `compatibility_matrix_url` should point to a page with actual K8s version data
 3. Verify: `go build ./...`, `make validate`, `go test -v ./...`
 
