@@ -208,14 +208,19 @@ func resolveFromStoredData(info addonWithInfo, k8sVersion string) output.AddonCo
 	// Full matrix: addon-version → []k8s-versions
 	if len(info.DBMatch.KubernetesCompatibility) > 0 {
 		installedNorm := strings.TrimPrefix(info.Version, "v")
-		// Try exact match first, then prefix match (e.g. "1.15.0" matches key "1.15")
+
+		sortedKeys := sortedMatrixKeys(info.DBMatch.KubernetesCompatibility)
+
+		// Try all keys; keep the most specific match (longest normalized key).
 		var matchedK8sVersions []string
 		var matchedKey string
-		for key, versions := range info.DBMatch.KubernetesCompatibility {
+		for _, key := range sortedKeys {
 			if matrixKeyMatchesInstalledVersion(key, installedNorm) {
-				matchedK8sVersions = versions
-				matchedKey = key
-				break
+				normKey := strings.TrimPrefix(strings.TrimSpace(key), "v")
+				if len(normKey) > len(strings.TrimPrefix(strings.TrimSpace(matchedKey), "v")) {
+					matchedK8sVersions = info.DBMatch.KubernetesCompatibility[key]
+					matchedKey = key
+				}
 			}
 		}
 
@@ -239,7 +244,12 @@ func resolveFromStoredData(info addonWithInfo, k8sVersion string) output.AddonCo
 				return result
 			}
 
-			// Installed version not in matrix — find latest compatible version
+			// Installed version not in matrix — fall back to min/max version if available.
+			if resolveFromMinMaxVersion(info.DBMatch, k8sMajorMinor, &result) {
+				result.Note = fmt.Sprintf("Installed version %s not found in stored matrix; %s", info.Version, result.Note)
+				return result
+			}
+
 			result.Compatible = output.StatusUnknown
 			latestKey := findLatestCompatibleVersion(info.DBMatch.KubernetesCompatibility, k8sMajorMinor)
 			if latestKey != "" {
@@ -269,15 +279,8 @@ func resolveFromStoredData(info addonWithInfo, k8sVersion string) output.AddonCo
 		return result
 	}
 
-	// Min-version only
-	if info.DBMatch.KubernetesMinVersion != "" {
-		if compareK8sVersions(k8sMajorMinor, info.DBMatch.KubernetesMinVersion) >= 0 {
-			result.Compatible = output.StatusTrue
-			result.Note = fmt.Sprintf("K8s %s >= minimum required %s", k8sMajorMinor, info.DBMatch.KubernetesMinVersion)
-		} else {
-			result.Compatible = output.StatusFalse
-			result.Note = fmt.Sprintf("K8s %s < minimum required %s", k8sMajorMinor, info.DBMatch.KubernetesMinVersion)
-		}
+	// Min/max version check (no full matrix available)
+	if resolveFromMinMaxVersion(info.DBMatch, k8sMajorMinor, &result) {
 		return result
 	}
 
@@ -291,16 +294,131 @@ func matrixKeyMatchesInstalledVersion(matrixKey string, installedVersion string)
 	if keyNorm == "" {
 		return false
 	}
+
+	// Skip non-semver keys that can never match a cluster-reported version.
+	if isNonSemverKey(keyNorm) {
+		return false
+	}
+
+	// Version range: "2.0.0-2.1.3" or "0.6.0-0.12.0"
+	if lo, hi, ok := parseVersionRangeKey(keyNorm); ok {
+		return versionInRange(installedVersion, lo, hi)
+	}
+
+	// Exact, prefix, or pre-release match: "1.15" matches "1.15", "1.15.0", "1.15.0-rc1"
 	if keyNorm == installedVersion || strings.HasPrefix(installedVersion, keyNorm+".") || strings.HasPrefix(installedVersion, keyNorm+"-") {
 		return true
 	}
+
+	// Wildcard: "1.9.x" matches "1.9", "1.9.0", "1.9.5"
 	if strings.HasSuffix(keyNorm, ".x") {
 		keyBase := strings.TrimSuffix(keyNorm, ".x")
 		if installedVersion == keyBase || strings.HasPrefix(installedVersion, keyBase+".") {
 			return true
 		}
 	}
+
 	return false
+}
+
+// isNonSemverKey returns true for keys that don't start with a digit, meaning
+// they represent branch names (master, HEAD, main, latest) or non-version
+// identifiers (cis-1.6, ≥0.18.x). These are kept in the database for
+// reference but skipped during version matching.
+func isNonSemverKey(key string) bool {
+	if key == "" {
+		return true
+	}
+	first := key[0]
+	return !(first >= '0' && first <= '9')
+}
+
+// parseVersionRangeKey parses keys like "2.0.0-v2.1.3" into a lo/hi pair.
+// Returns false if the key is not a version range. Both sides are stripped
+// of any "v" prefix.
+func parseVersionRangeKey(key string) (lo string, hi string, ok bool) {
+	dashIdx := strings.Index(key, "-")
+	if dashIdx <= 0 || dashIdx >= len(key)-1 {
+		return "", "", false
+	}
+
+	left := strings.TrimPrefix(key[:dashIdx], "v")
+	right := strings.TrimPrefix(key[dashIdx+1:], "v")
+
+	if left == "" || right == "" {
+		return "", "", false
+	}
+	if left[0] < '0' || left[0] > '9' || right[0] < '0' || right[0] > '9' {
+		return "", "", false
+	}
+	if !strings.Contains(right, ".") {
+		return "", "", false
+	}
+
+	return left, right, true
+}
+
+// versionInRange checks if installedVersion is between lo and hi (inclusive),
+// using numeric segment comparison.
+func versionInRange(installed string, lo string, hi string) bool {
+	instParts, instOK := parseAddonVersionFloor(installed)
+	loParts, loOK := parseAddonVersionFloor(lo)
+	hiParts, hiOK := parseAddonVersionFloor(hi)
+	if !instOK || !loOK || !hiOK {
+		return false
+	}
+	return compareAddonVersionFloors(instParts, loParts) >= 0 &&
+		compareAddonVersionFloors(instParts, hiParts) <= 0
+}
+
+// sortedMatrixKeys returns the keys of a compatibility matrix in sorted order
+// to ensure deterministic iteration.
+func sortedMatrixKeys(matrix map[string][]string) []string {
+	keys := make([]string, 0, len(matrix))
+	for k := range matrix {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// resolveFromMinMaxVersion checks kubernetes_min_version and kubernetes_max_version
+// to produce a compatibility verdict. Returns true if a verdict was produced.
+func resolveFromMinMaxVersion(a *addon.Addon, k8sMajorMinor string, result *output.AddonCompatibility) bool {
+	if a.KubernetesMinVersion == "" && a.KubernetesMaxVersion == "" {
+		return false
+	}
+
+	aboveMin := true
+	belowMax := true
+
+	if a.KubernetesMinVersion != "" {
+		aboveMin = compareK8sVersions(k8sMajorMinor, a.KubernetesMinVersion) >= 0
+	}
+	if a.KubernetesMaxVersion != "" {
+		belowMax = compareK8sVersions(k8sMajorMinor, a.KubernetesMaxVersion) <= 0
+	}
+
+	if aboveMin && belowMax {
+		result.Compatible = output.StatusTrue
+		switch {
+		case a.KubernetesMinVersion != "" && a.KubernetesMaxVersion != "":
+			result.Note = fmt.Sprintf("K8s %s is within supported range %s–%s", k8sMajorMinor, a.KubernetesMinVersion, a.KubernetesMaxVersion)
+		case a.KubernetesMinVersion != "":
+			result.Note = fmt.Sprintf("K8s %s >= minimum required %s", k8sMajorMinor, a.KubernetesMinVersion)
+		default:
+			result.Note = fmt.Sprintf("K8s %s <= maximum supported %s", k8sMajorMinor, a.KubernetesMaxVersion)
+		}
+	} else {
+		result.Compatible = output.StatusFalse
+		switch {
+		case !aboveMin:
+			result.Note = fmt.Sprintf("K8s %s < minimum required %s", k8sMajorMinor, a.KubernetesMinVersion)
+		default:
+			result.Note = fmt.Sprintf("K8s %s > maximum supported %s", k8sMajorMinor, a.KubernetesMaxVersion)
+		}
+	}
+	return true
 }
 
 func findThresholdCompatibilityMatch(matrix map[string][]string, installedVersion string, targetK8sVersion string) (string, []string, bool) {

@@ -565,6 +565,16 @@ func TestHasStoredCompatibility_NoData(t *testing.T) {
 	}
 }
 
+func TestHasStoredCompatibility_MaxVersionOnly(t *testing.T) {
+	a := &Addon{
+		Name:                 "test-addon",
+		KubernetesMaxVersion: "1.28",
+	}
+	if !a.HasStoredCompatibility() {
+		t.Error("HasStoredCompatibility() should return true for addon with max version")
+	}
+}
+
 func TestHasStoredCompatibility_EmptyMatrix(t *testing.T) {
 	a := &Addon{
 		Name:                    "test-addon",

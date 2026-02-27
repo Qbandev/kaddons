@@ -20,12 +20,13 @@ type Addon struct {
 	ChangelogLocation       string              `json:"changelog_location"`
 	KubernetesCompatibility map[string][]string `json:"kubernetes_compatibility,omitempty"`
 	KubernetesMinVersion    string              `json:"kubernetes_min_version,omitempty"`
+	KubernetesMaxVersion    string              `json:"kubernetes_max_version,omitempty"`
 }
 
 // HasStoredCompatibility returns true if the addon has pre-populated
-// Kubernetes compatibility data (either a full matrix or a minimum version).
+// Kubernetes compatibility data (either a full matrix or a minimum/maximum version).
 func (a *Addon) HasStoredCompatibility() bool {
-	return len(a.KubernetesCompatibility) > 0 || a.KubernetesMinVersion != ""
+	return len(a.KubernetesCompatibility) > 0 || a.KubernetesMinVersion != "" || a.KubernetesMaxVersion != ""
 }
 
 type addonsFile struct {
