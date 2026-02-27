@@ -142,6 +142,38 @@ func TestCompareK8sVersions(t *testing.T) {
 	}
 }
 
+func TestCompareK8sVersions_MultiDigitMajor(t *testing.T) {
+	if got := compareK8sVersions("10.1", "2.9"); got != 1 {
+		t.Fatalf("compareK8sVersions(10.1, 2.9) = %d, want 1", got)
+	}
+	if got := compareK8sVersions("2.9", "10.1"); got != -1 {
+		t.Fatalf("compareK8sVersions(2.9, 10.1) = %d, want -1", got)
+	}
+}
+
+func TestMatrixKeyMatchesInstalledVersion_CaseInsensitiveWildcard(t *testing.T) {
+	if !matrixKeyMatchesInstalledVersion("1.29.X", "1.29.3") {
+		t.Fatal("expected mixed-case wildcard key to match installed version")
+	}
+}
+
+func TestFindDirectMatrixCompatibilityMatch_PrefersMostSpecificDeterministically(t *testing.T) {
+	matrix := map[string][]string{
+		"1.15.x": {"1.31"},
+		"1.15":   {"1.30"},
+	}
+	matchedKey, matchedVersions, found := findDirectMatrixCompatibilityMatch(matrix, "1.15.2")
+	if !found {
+		t.Fatal("expected a matching matrix key")
+	}
+	if matchedKey != "1.15" {
+		t.Fatalf("expected key 1.15, got %q", matchedKey)
+	}
+	if len(matchedVersions) != 1 || matchedVersions[0] != "1.30" {
+		t.Fatalf("unexpected matched versions: %#v", matchedVersions)
+	}
+}
+
 func TestResolveFromStoredData_FullMatrix_Compatible(t *testing.T) {
 	info := addonWithInfo{
 		DetectedAddon: cluster.DetectedAddon{

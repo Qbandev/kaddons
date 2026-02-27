@@ -28,7 +28,7 @@ func main() {
 
 	rootCmd := &cobra.Command{
 		Use:           "kaddons",
-		Version:       version,
+		Version:       fmt.Sprintf("%s (commit: %s, date: %s)", version, commit, date),
 		Short:         "Kubernetes addon compatibility checker",
 		Long:          "Discovers addons installed in a Kubernetes cluster and checks their compatibility with the cluster's Kubernetes version using Gemini AI.",
 		SilenceUsage:  true,
@@ -41,9 +41,6 @@ func main() {
 			key := apiKey
 			if key == "" {
 				key = os.Getenv("GEMINI_API_KEY")
-			}
-			if key == "" {
-				return fmt.Errorf("Gemini API key is required: set GEMINI_API_KEY env var or use --key flag")
 			}
 
 			ctx := context.Background()

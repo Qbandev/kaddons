@@ -193,6 +193,7 @@ func linkifyReportNote(note string) template.HTML {
 	withLinks := reportURLPattern.ReplaceAllStringFunc(escapedNote, func(url string) string {
 		return fmt.Sprintf(`<a href="%s" target="_blank" rel="noopener noreferrer">%s</a>`, url, url)
 	})
+	// #nosec G203 -- note content is escaped before URL linkification.
 	return template.HTML(withLinks)
 }
 

@@ -85,7 +85,7 @@ func run(cacheRootPath string, workerCount int, filters []string) error {
 	}
 
 	pagesCacheDirectory := filepath.Join(cacheRootPath, "pages")
-	if err := os.MkdirAll(pagesCacheDirectory, 0o755); err != nil {
+	if err := os.MkdirAll(pagesCacheDirectory, 0o750); err != nil {
 		return fmt.Errorf("creating pages cache directory: %w", err)
 	}
 
@@ -228,7 +228,7 @@ func fetchAndClassifyOne(
 
 	cacheFileName := sha256Hex(pageURL) + ".txt"
 	cacheFilePath := filepath.Join(pagesCacheDirectory, cacheFileName)
-	if writeErr := os.WriteFile(cacheFilePath, []byte(content), 0o644); writeErr != nil {
+	if writeErr := os.WriteFile(cacheFilePath, []byte(content), 0o600); writeErr != nil {
 		return fetchResult{
 			classifiedTier: "cache-write-error",
 			fetchError:     writeErr.Error(),
@@ -280,7 +280,7 @@ func writeManifest(manifestPath string, manifestByAddonName map[string]manifestE
 	if err != nil {
 		return fmt.Errorf("marshaling manifest: %w", err)
 	}
-	if err := os.WriteFile(manifestPath, manifestBytes, 0o644); err != nil {
+	if err := os.WriteFile(manifestPath, manifestBytes, 0o600); err != nil {
 		return fmt.Errorf("writing manifest: %w", err)
 	}
 	return nil

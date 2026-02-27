@@ -30,11 +30,11 @@ const (
 
 var (
 	// Strict patterns: "kubernetes/k8s" adjacent to a version number + formal matrix keyword.
-	k8sVersionStrict = regexp.MustCompile(`(?i)(?:kubernetes|k8s)\s*(?:version)?\s*v?\d+\.\d+`)
+	k8sVersionStrict = regexp.MustCompile(`(?i)(?:(?:kubernetes|k8s)\s*(?:version)?\s*v?\d+\.\d+|v?\d+\.\d+\s*(?:kubernetes|k8s))`)
 	matrixKeyStrict  = regexp.MustCompile(`(?i)(?:compatibility\s+matrix|supported\s+(?:kubernetes\s+)?versions?|version\s+support|k8s\s+compatibility)`)
 
 	// Loose patterns: "kubernetes/k8s" within 200 chars of a version number + broader keywords.
-	k8sVersionLoose = regexp.MustCompile(`(?i)(?:kubernetes|k8s).{0,200}v?\d+\.\d+`)
+	k8sVersionLoose = regexp.MustCompile(`(?i)(?:(?:kubernetes|k8s)[\s\S]{0,200}v?\d+\.\d+|v?\d+\.\d+[\s\S]{0,200}(?:kubernetes|k8s))`)
 	matrixKeyLoose  = regexp.MustCompile(`(?i)(?:compatibility\s+matrix|supported\s+(?:kubernetes\s+)?versions?|version\s+support|k8s\s+compatibility|requirements?|prerequisites?|minimum\s+(?:kubernetes\s+)?version|tested\s+(?:on|with|against)|works\s+with|compatible\s+with|requires?\s+(?:kubernetes|k8s)|platform\s+(?:support|notes?|requirements?))`)
 
 	// Validation pattern for K8s version strings (e.g. "1.28", "1.30").

@@ -206,6 +206,7 @@ func TestClassifyK8sMatrix_Strict(t *testing.T) {
 		{"version support", "Version support: Kubernetes 1.30 is supported"},
 		{"k8s compat", "k8s compatibility: k8s 1.28 and k8s 1.29"},
 		{"v-prefix strict", "Supported versions: Kubernetes v1.28, v1.29, v1.30"},
+		{"reversed order strict", "Compatibility matrix: v1.28 Kubernetes and v1.29 Kubernetes are supported"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -228,6 +229,7 @@ func TestClassifyK8sMatrix_Partial(t *testing.T) {
 		{"platform requirements", "Platform requirements: Kubernetes v1.24 minimum"},
 		{"compatible with", "Compatible with Kubernetes versions from 1.25 to 1.30"},
 		{"loose distance", "This addon runs on Kubernetes. Check the requirements for version 1.28 or newer."},
+		{"newline and reversed order", "Requirements:\nv1.28 is validated on Kubernetes clusters"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
