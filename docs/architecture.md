@@ -9,12 +9,12 @@ kaddons uses a **Plan-and-Execute** architecture that separates deterministic da
 │                      PLAN-AND-EXECUTE PIPELINE                      │
 ├──────────────────┬──────────────────────────────────────────────────┤
 │ Phase 1          │ Discovery (deterministic)                        │
-│ Phase 2          │ Enrichment (deterministic)                       │
-│ Phase 3          │ Analysis (linear one-addon-at-a-time LLM calls)   │
+│ Phase 2          │ Enrichment + stored resolution (deterministic)   │
+│ Phase 3          │ Runtime analysis (LLM only when needed)          │
 └──────────────────┴──────────────────────────────────────────────────┘
 ```
 
-Phases 1 and 2 are fully deterministic — the same cluster state always produces the same set of addons and fetched pages. The LLM is only used in Phase 3.
+Phases 1 and 2 are fully deterministic — the same cluster state always produces the same matched addons and stored-data verdict candidates. The LLM is only used in Phase 3 for addons unresolved by stored data.
 
 ## Phase 1: Discovery
 
@@ -54,9 +54,9 @@ Deterministic cluster interrogation via `kubectl`. No LLM involved.
 - `--namespace` restricts which namespaces are queried
 - `--addons` filters by addon name after database matching
 
-## Phase 2: Enrichment
+## Phase 2: Enrichment and stored-data resolution
 
-Deterministic data fetching. No LLM involved.
+Deterministic enrichment. No LLM involved.
 
 ### Database matching
 
@@ -80,9 +80,20 @@ Unmatched workloads are silently dropped — they are application workloads, not
 
 When multiple workloads resolve to the same addon (e.g., `ebs-csi-node` and `ebs-csi-controller` both match `AWS EBS CSI Driver`), the entry with a version is preferred.
 
-### Compatibility page fetching
+### Stored compatibility resolution
 
-For each matched addon with a `compatibility_matrix_url`:
+Before any network fetches, the agent resolves addon compatibility from embedded database fields when possible (`internal/agent/agent.go:resolveFromStoredData`):
+
+- `kubernetes_compatibility` matrix keys are matched deterministically against installed addon versions
+- `kubernetes_min_version` is used as a floor check when matrix keys are absent
+- direct matrix-key selection is deterministic (most specific match wins)
+- key handling includes exact/prefix semver, `.x` wildcards (case-insensitive), ranges (`A-B`), and threshold/floor forms (`>=`, `+`)
+
+Stored verdicts are emitted immediately with `data_source="stored"`, and only unresolved addons continue to runtime fetching/LLM analysis.
+
+### Runtime compatibility page fetching
+
+For each addon that still requires runtime analysis and has a `compatibility_matrix_url`:
 
 1. **GitHub URLs** are converted to `raw.githubusercontent.com` equivalents (`internal/fetch/fetch.go:GitHubRawURL`), fetching raw Markdown that preserves tables, headers, and lists for the LLM
 2. **Non-GitHub URLs** are fetched as HTML and stripped of tags (collapsed to text)
@@ -104,9 +115,9 @@ EOL slug resolution uses a runtime catalog from [endoflife.date v1](https://endo
 
 This provides EOL dates, latest versions, and support status per release cycle.
 
-## Phase 3: Analysis
+## Phase 3: Runtime analysis
 
-Gemini is called in a deterministic linear loop: one addon per request, in sorted order.
+Gemini is called in a deterministic linear loop only for unresolved runtime addons: one addon per request, in sorted order.
 
 For each addon, the agent builds a bounded structured payload:
 - addon identity fields (`name`, `namespace`, `installed_version`)
@@ -121,6 +132,8 @@ The system prompt enforces a strict single-object response:
 - extra keys are rejected by schema settings
 
 If per-addon analysis fails after bounded retries/timeouts, that addon is emitted as `compatible="unknown"` with an explanatory note so the run always completes without hanging.
+
+Runtime verdicts are tagged with `data_source="llm"`.
 
 ### Response processing
 
@@ -150,10 +163,11 @@ Uses a URL-centric pipeline that processes unique URLs (not per-addon items), gu
 | Flag | Behavior |
 |------|----------|
 | (none) | Both checks run |
+| `--stored-only` | Validate embedded stored fields only; no network calls |
 | `--links` | Downgrade all tasks to HEAD-only (skip body fetch) |
 | `--matrix` | Remove non-matrix tasks (only process `compatibility_matrix_url` entries) |
 
-Flags are mutually exclusive.
+`--links` and `--matrix` are mutually exclusive. `--stored-only` cannot be combined with either.
 
 **Reporting:**
 
@@ -171,6 +185,8 @@ A URL returning 200 but failing regex appears only in Table 2. An unreachable ma
 ```
 cmd/kaddons/
   main.go                             CLI entrypoint (Cobra), flag parsing
+cmd/kaddons-extract/
+  main.go                             Matrix extraction cache/manifest generator (dev workflow)
 cmd/kaddons-validate/
   main.go                             DB validation tool (dev/CI only, not distributed)
 
@@ -191,7 +207,7 @@ internal/
     retry.go                          Shared retry policy, deterministic backoff, retry classifiers
     retry_test.go                     Retry policy and retry behavior tests
   output/
-    output.go                         JSON/HTML formatting, Status type, JSON extraction
+    output.go                         JSON/HTML formatting, Status type, `data_source`, JSON extraction
     output_test.go                    Status round-trip, JSON backward compat tests
   validate/
     validate.go                       URL reachability + matrix content validation library

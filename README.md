@@ -10,8 +10,8 @@ kaddons uses a three-phase **Plan-and-Execute** pipeline. Phases 1 and 2 are ful
 
 ```
 Phase 1: Discovery        kubectl → detect K8s version + installed workloads
-Phase 2: Enrichment       Match against 668-addon DB, fetch compat pages + EOL data
-Phase 3: Analysis         Linear per-addon Gemini calls → compatibility verdicts
+Phase 2: Enrichment       Match against 668-addon DB, resolve stored matrix data first
+Phase 3: Analysis         Gemini calls only for addons unresolved by stored data
 ```
 
 See [docs/architecture.md](docs/architecture.md) for the full data flow.
@@ -19,7 +19,7 @@ See [docs/architecture.md](docs/architecture.md) for the full data flow.
 ## Prerequisites
 
 - `kubectl` configured with cluster access
-- A [Gemini API key](https://aistudio.google.com/apikey)
+- A [Gemini API key](https://aistudio.google.com/apikey) when runtime LLM analysis is needed
 
 ## Install
 
@@ -97,6 +97,7 @@ kaddons -n kube-system -o html
       "installed_version": "v1.14.2",
       "compatible": "true",
       "latest_compatible_version": "1.18",
+      "data_source": "stored",
       "note": "The compatibility matrix at https://cert-manager.io/docs/releases/ states v1.14 supports K8s 1.24-1.31. Supported until 2025-09-10."
     },
     {
@@ -112,6 +113,7 @@ kaddons -n kube-system -o html
       "namespace": "kube-system",
       "installed_version": "8.0.0",
       "compatible": "unknown",
+      "data_source": "llm",
       "note": "The page at fairwinds.com is a product overview without a version compatibility matrix."
     }
   ]
@@ -122,6 +124,10 @@ The `compatible` field is a tri-state string:
 - `"true"` — addon version is confirmed compatible
 - `"false"` — addon version is not compatible; check `latest_compatible_version`
 - `"unknown"` — compatibility could not be determined
+
+The `data_source` field shows where the verdict came from:
+- `"stored"` — deterministic resolver from embedded `kubernetes_compatibility`/`kubernetes_min_version`
+- `"llm"` — runtime Gemini analysis of fetched compatibility evidence
 
 The `note` field always cites its source URL and includes support-until dates when available.
 
@@ -136,10 +142,12 @@ Writes a styled report to `./kaddons-report.html` by default (or to `--output-pa
 A separate `kaddons-validate` binary checks the addon database for URL health and compatibility matrix content. It is not shipped with releases — it's a development and CI tool.
 
 ```bash
-go run ./cmd/kaddons-validate              # Run both checks (default)
+go run ./cmd/kaddons-validate              # Run live checks (default)
+go run ./cmd/kaddons-validate --stored-only # Stored-data validation only (no network)
 go run ./cmd/kaddons-validate --links      # Only reachability checks
 go run ./cmd/kaddons-validate --matrix     # Only content validation
-make validate                              # Shorthand for the above
+make validate                              # Stored-data validation only (deterministic)
+make validate-live                         # Full live validation (links + matrix content)
 ```
 
 Exit codes: `0` all checks passed, `1` validation failures found, `2` runtime error.
