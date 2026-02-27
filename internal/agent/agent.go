@@ -351,7 +351,7 @@ func parseVersionRangeKey(key string) (lo string, hi string, ok bool) {
 	if left[0] < '0' || left[0] > '9' || right[0] < '0' || right[0] > '9' {
 		return "", "", false
 	}
-	if !strings.Contains(right, ".") {
+	if !strings.Contains(left, ".") || !strings.Contains(right, ".") {
 		return "", "", false
 	}
 
