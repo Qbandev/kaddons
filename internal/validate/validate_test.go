@@ -505,6 +505,71 @@ func TestValidateStoredData_NoStoredData(t *testing.T) {
 	}
 }
 
+func TestValidateStoredData_ValidMaxVersion(t *testing.T) {
+	addons := []addon.Addon{
+		{
+			Name:                 "old-addon",
+			KubernetesMinVersion: "1.20",
+			KubernetesMaxVersion: "1.28",
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 0 {
+		t.Fatalf("expected 0 problems, got %d: %+v", len(problems), problems)
+	}
+}
+
+func TestValidateStoredData_InvalidMaxVersion(t *testing.T) {
+	addons := []addon.Addon{
+		{
+			Name:                 "bad-addon",
+			KubernetesMaxVersion: "v1.28",
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 1 {
+		t.Fatalf("expected 1 problem, got %d: %+v", len(problems), problems)
+	}
+	if problems[0].field != "kubernetes_max_version" {
+		t.Errorf("expected field kubernetes_max_version, got %q", problems[0].field)
+	}
+}
+
+func TestValidateStoredData_MinExceedsMax(t *testing.T) {
+	addons := []addon.Addon{
+		{
+			Name:                 "inverted-addon",
+			KubernetesMinVersion: "1.30",
+			KubernetesMaxVersion: "1.20",
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 1 {
+		t.Fatalf("expected 1 problem, got %d: %+v", len(problems), problems)
+	}
+	if problems[0].reason != "min version must not exceed max version" {
+		t.Errorf("unexpected reason: %q", problems[0].reason)
+	}
+}
+
+func TestValidateStoredData_MinExceedsMaxNumeric(t *testing.T) {
+	// "1.28" < "1.9" lexicographically, but 1.28 > 1.9 numerically.
+	addons := []addon.Addon{
+		{
+			Name:                 "numeric-edge",
+			KubernetesMinVersion: "1.28",
+			KubernetesMaxVersion: "1.9",
+		},
+	}
+	problems := validateStoredData(addons)
+	if len(problems) != 1 {
+		t.Fatalf("expected 1 problem for min=1.28 > max=1.9, got %d: %+v", len(problems), problems)
+	}
+	if problems[0].reason != "min version must not exceed max version" {
+		t.Errorf("unexpected reason: %q", problems[0].reason)
+	}
+}
+
 func TestMatrixOnlyFlag(t *testing.T) {
 	addons := []addon.Addon{
 		{Name: "addon-a", CompatibilityMatrixURL: "https://example.com/matrix"},

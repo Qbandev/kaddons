@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -38,10 +39,14 @@ type manifestEntry struct {
 func main() {
 	cacheRootPath := flag.String("cache-root", ".cache/matrix-extract", "Root directory for extracted matrix cache files")
 	workerCount := flag.Int("workers", defaultWorkerCount, "Number of parallel fetch workers")
+	filterFlag := flag.String("filter", "", "Comma-separated addon names to process (case-insensitive substring match)")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: kaddons-extract [--cache-root PATH] [--workers N]\n\n")
-		fmt.Fprintf(os.Stderr, "Fetches compatibility pages for all addon matrix URLs,\n")
+		fmt.Fprintf(os.Stderr, "Usage: kaddons-extract [--cache-root PATH] [--workers N] [--filter NAMES]\n\n")
+		fmt.Fprintf(os.Stderr, "Fetches compatibility pages for addon matrix URLs,\n")
 		fmt.Fprintf(os.Stderr, "classifies matrix quality, and writes a manifest for extraction subagents.\n\n")
+		fmt.Fprintf(os.Stderr, "Examples:\n")
+		fmt.Fprintf(os.Stderr, "  kaddons-extract --filter cert-manager\n")
+		fmt.Fprintf(os.Stderr, "  kaddons-extract --filter \"cert-manager,karpenter,istio\"\n\n")
 		fmt.Fprintf(os.Stderr, "Flags:\n")
 		flag.PrintDefaults()
 	}
@@ -52,16 +57,31 @@ func main() {
 		os.Exit(2)
 	}
 
-	if err := run(*cacheRootPath, *workerCount); err != nil {
+	var filters []string
+	if *filterFlag != "" {
+		for _, f := range strings.Split(*filterFlag, ",") {
+			f = strings.TrimSpace(f)
+			if f != "" {
+				filters = append(filters, strings.ToLower(f))
+			}
+		}
+	}
+
+	if err := run(*cacheRootPath, *workerCount, filters); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
 		os.Exit(1)
 	}
 }
 
-func run(cacheRootPath string, workerCount int) error {
-	addons, err := addon.LoadAddons()
+func run(cacheRootPath string, workerCount int, filters []string) error {
+	allAddons, err := addon.LoadAddons()
 	if err != nil {
 		return fmt.Errorf("failed to load addon database: %w", err)
+	}
+
+	addons := filterAddons(allAddons, filters)
+	if len(addons) == 0 {
+		return fmt.Errorf("no addons matched filter %s (total in DB: %d)", strings.Join(filters, ", "), len(allAddons))
 	}
 
 	pagesCacheDirectory := filepath.Join(cacheRootPath, "pages")
@@ -72,9 +92,12 @@ func run(cacheRootPath string, workerCount int) error {
 	urlToAddonNames := collectCompatibilityURLs(addons)
 	uniqueCompatibilityURLs := sortedURLKeys(urlToAddonNames)
 
+	if len(filters) > 0 {
+		fmt.Fprintf(os.Stderr, "Filter matched %d addons (from %d total)\n", len(addons), len(allAddons))
+	}
 	fmt.Fprintf(
 		os.Stderr,
-		"Loaded %d addons with %d unique compatibility URLs\n",
+		"Processing %d addons with %d unique compatibility URLs\n",
 		len(addons),
 		len(uniqueCompatibilityURLs),
 	)
@@ -111,6 +134,23 @@ func run(cacheRootPath string, workerCount int) error {
 	fmt.Fprintf(os.Stderr, "Manifest written: %s\n", manifestPath)
 
 	return nil
+}
+
+func filterAddons(addons []addon.Addon, filters []string) []addon.Addon {
+	if len(filters) == 0 {
+		return addons
+	}
+	var matched []addon.Addon
+	for _, a := range addons {
+		nameLower := strings.ToLower(a.Name)
+		for _, f := range filters {
+			if strings.Contains(nameLower, f) {
+				matched = append(matched, a)
+				break
+			}
+		}
+	}
+	return matched
 }
 
 func collectCompatibilityURLs(addons []addon.Addon) map[string][]string {

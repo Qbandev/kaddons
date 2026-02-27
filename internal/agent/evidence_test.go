@@ -348,3 +348,242 @@ func TestTruncateToValidUTF8Prefix_RespectsRuneBoundary(t *testing.T) {
 		t.Fatalf("truncateToValidUTF8Prefix() = %q, want %q", got, "hello ")
 	}
 }
+
+func TestResolveFromStoredData_DeterministicKeyMatching(t *testing.T) {
+	info := addonWithInfo{
+		DetectedAddon: cluster.DetectedAddon{
+			Name:      "knative",
+			Namespace: "knative-serving",
+			Version:   "v1.15.0",
+		},
+		DBMatch: &addon.Addon{
+			Name: "knative",
+			KubernetesCompatibility: map[string][]string{
+				"1.1":  {"1.20"},
+				"1.15": {"1.28"},
+			},
+		},
+	}
+
+	// Run multiple times to verify determinism — with unsorted map iteration
+	// "1.1" could prefix-match "1.15.0" non-deterministically. The fix should
+	// always pick "1.15" as the most specific match.
+	for i := 0; i < 20; i++ {
+		result := resolveFromStoredData(info, "1.28")
+		if result.Compatible != output.StatusTrue {
+			t.Fatalf("run %d: expected StatusTrue, got %q (note: %s)", i, result.Compatible, result.Note)
+		}
+		if !strings.Contains(result.Note, "1.15") {
+			t.Fatalf("run %d: expected note to mention key '1.15', got: %s", i, result.Note)
+		}
+	}
+}
+
+func TestResolveFromStoredData_MaxVersion_Compatible(t *testing.T) {
+	info := addonWithInfo{
+		DetectedAddon: cluster.DetectedAddon{
+			Name:      "old-addon",
+			Namespace: "default",
+			Version:   "v1.0.0",
+		},
+		DBMatch: &addon.Addon{
+			Name:                 "old-addon",
+			KubernetesMinVersion: "1.20",
+			KubernetesMaxVersion: "1.28",
+		},
+	}
+
+	result := resolveFromStoredData(info, "1.25")
+	if result.Compatible != output.StatusTrue {
+		t.Errorf("expected StatusTrue, got %q (note: %s)", result.Compatible, result.Note)
+	}
+}
+
+func TestResolveFromStoredData_MaxVersion_TooNew(t *testing.T) {
+	info := addonWithInfo{
+		DetectedAddon: cluster.DetectedAddon{
+			Name:      "old-addon",
+			Namespace: "default",
+			Version:   "v1.0.0",
+		},
+		DBMatch: &addon.Addon{
+			Name:                 "old-addon",
+			KubernetesMinVersion: "1.20",
+			KubernetesMaxVersion: "1.28",
+		},
+	}
+
+	result := resolveFromStoredData(info, "1.30")
+	if result.Compatible != output.StatusFalse {
+		t.Errorf("expected StatusFalse, got %q (note: %s)", result.Compatible, result.Note)
+	}
+}
+
+func TestResolveFromStoredData_MaxVersionOnly(t *testing.T) {
+	info := addonWithInfo{
+		DetectedAddon: cluster.DetectedAddon{
+			Name:      "old-addon",
+			Namespace: "default",
+			Version:   "v1.0.0",
+		},
+		DBMatch: &addon.Addon{
+			Name:                 "old-addon",
+			KubernetesMaxVersion: "1.26",
+		},
+	}
+
+	result := resolveFromStoredData(info, "1.25")
+	if result.Compatible != output.StatusTrue {
+		t.Errorf("expected StatusTrue for K8s 1.25 <= max 1.26, got %q", result.Compatible)
+	}
+
+	result = resolveFromStoredData(info, "1.27")
+	if result.Compatible != output.StatusFalse {
+		t.Errorf("expected StatusFalse for K8s 1.27 > max 1.26, got %q", result.Compatible)
+	}
+}
+
+func TestResolveFromStoredData_MatrixFallbackToMinVersion(t *testing.T) {
+	info := addonWithInfo{
+		DetectedAddon: cluster.DetectedAddon{
+			Name:      "cert-manager",
+			Namespace: "cert-manager",
+			Version:   "v99.0.0",
+		},
+		DBMatch: &addon.Addon{
+			Name: "cert-manager",
+			KubernetesCompatibility: map[string][]string{
+				"1.15": {"1.28", "1.29", "1.30"},
+			},
+			KubernetesMinVersion: "1.20",
+		},
+	}
+
+	// Installed version v99.0.0 won't match any matrix key.
+	// Should fall back to kubernetes_min_version instead of returning unknown.
+	result := resolveFromStoredData(info, "1.25")
+	if result.Compatible != output.StatusTrue {
+		t.Errorf("expected fallback to min_version -> StatusTrue, got %q (note: %s)", result.Compatible, result.Note)
+	}
+}
+
+func TestMatrixKeyMatchesInstalledVersion_SkipsNonSemver(t *testing.T) {
+	nonSemverKeys := []string{"master", "HEAD", "main", "latest", "cis-1.6", "cis-1.11", "≥0.18.x", "≤0.9.x"}
+	for _, key := range nonSemverKeys {
+		if matrixKeyMatchesInstalledVersion(key, "1.0.0") {
+			t.Errorf("non-semver key %q should never match, but it did", key)
+		}
+		if matrixKeyMatchesInstalledVersion(key, "0.18.0") {
+			t.Errorf("non-semver key %q should never match, but it did", key)
+		}
+	}
+}
+
+func TestMatrixKeyMatchesInstalledVersion_VersionRange(t *testing.T) {
+	tests := []struct {
+		name      string
+		key       string
+		installed string
+		want      bool
+	}{
+		{"in full range", "v2.0.0-v2.1.3", "2.1.0", true},
+		{"at range low bound", "v2.0.0-v2.1.3", "2.0.0", true},
+		{"at range high bound", "v2.0.0-v2.1.3", "2.1.3", true},
+		{"below range", "v2.0.0-v2.1.3", "1.9.0", false},
+		{"above range", "v2.0.0-v2.1.3", "2.2.0", false},
+		{"kots range match", "1.124.17-1.128.3", "1.125.0", true},
+		{"kots range below", "1.124.17-1.128.3", "1.124.16", false},
+		{"kots range above", "1.124.17-1.128.3", "1.128.4", false},
+		{"clusternet range", "v0.6.0-v0.12.0", "0.9.0", true},
+		{"clusternet at high", "v0.6.0-v0.12.0", "0.12.0", true},
+		{"clusternet above", "v0.6.0-v0.12.0", "0.13.0", false},
+		{"not a range without dots", "0.3.4-7", "0.3.5", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := matrixKeyMatchesInstalledVersion(tt.key, tt.installed)
+			if got != tt.want {
+				t.Errorf("matrixKeyMatchesInstalledVersion(%q, %q) = %v, want %v", tt.key, tt.installed, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMatrixKeyMatchesInstalledVersion_ExistingBehavior(t *testing.T) {
+	tests := []struct {
+		name      string
+		key       string
+		installed string
+		want      bool
+	}{
+		{"exact match", "1.15", "1.15", true},
+		{"prefix match", "1.15", "1.15.0", true},
+		{"prefix with patch", "1.15", "1.15.3", true},
+		{"wildcard match", "1.9.x", "1.9.5", true},
+		{"wildcard exact", "1.9.x", "1.9", true},
+		{"no match", "1.15", "1.16.0", false},
+		{"v prefix in key", "v1.15", "1.15.0", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := matrixKeyMatchesInstalledVersion(tt.key, tt.installed)
+			if got != tt.want {
+				t.Errorf("matrixKeyMatchesInstalledVersion(%q, %q) = %v, want %v", tt.key, tt.installed, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestResolveFromStoredData_VersionRange(t *testing.T) {
+	info := addonWithInfo{
+		DetectedAddon: cluster.DetectedAddon{
+			Name:      "aws-load-balancer-controller",
+			Namespace: "kube-system",
+			Version:   "v2.1.0",
+		},
+		DBMatch: &addon.Addon{
+			Name: "AWS Load Balancer Controller",
+			KubernetesCompatibility: map[string][]string{
+				"v2.0.0-v2.1.3": {"1.16", "1.17", "1.18", "1.19", "1.20", "1.21"},
+				"v2.4.0-v2.4.7": {"1.22", "1.23", "1.24", "1.25"},
+			},
+		},
+	}
+
+	result := resolveFromStoredData(info, "1.19")
+	if result.Compatible != output.StatusTrue {
+		t.Errorf("expected StatusTrue for v2.1.0 in range v2.0.0-v2.1.3 on K8s 1.19, got %q (note: %s)", result.Compatible, result.Note)
+	}
+
+	result = resolveFromStoredData(info, "1.25")
+	if result.Compatible != output.StatusFalse {
+		t.Errorf("expected StatusFalse for v2.1.0 on K8s 1.25 (not in range's K8s list), got %q (note: %s)", result.Compatible, result.Note)
+	}
+}
+
+func TestResolveFromStoredData_NonSemverKeysSkipped(t *testing.T) {
+	info := addonWithInfo{
+		DetectedAddon: cluster.DetectedAddon{
+			Name:      "istio",
+			Namespace: "istio-system",
+			Version:   "1.29.0",
+		},
+		DBMatch: &addon.Addon{
+			Name: "Istio",
+			KubernetesCompatibility: map[string][]string{
+				"master": {"1.31", "1.32", "1.33", "1.34", "1.35"},
+				"1.29":   {"1.31", "1.32", "1.33", "1.34", "1.35"},
+				"1.28":   {"1.30", "1.31", "1.32", "1.33", "1.34"},
+			},
+		},
+	}
+
+	// Should match "1.29" not "master", even though both are in the map.
+	result := resolveFromStoredData(info, "1.32")
+	if result.Compatible != output.StatusTrue {
+		t.Errorf("expected StatusTrue, got %q (note: %s)", result.Compatible, result.Note)
+	}
+	if strings.Contains(result.Note, "master") {
+		t.Errorf("expected note to reference '1.29', not 'master': %s", result.Note)
+	}
+}

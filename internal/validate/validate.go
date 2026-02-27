@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -136,6 +138,27 @@ func validateStoredData(addons []addon.Addon) []storedDataProblem {
 			})
 		}
 
+		if a.KubernetesMaxVersion != "" && !k8sVersionFormat.MatchString(a.KubernetesMaxVersion) {
+			problems = append(problems, storedDataProblem{
+				addonName: a.Name,
+				field:     "kubernetes_max_version",
+				value:     a.KubernetesMaxVersion,
+				reason:    "must match format X.Y (e.g. 1.28)",
+			})
+		}
+
+		if a.KubernetesMinVersion != "" && a.KubernetesMaxVersion != "" &&
+			k8sVersionFormat.MatchString(a.KubernetesMinVersion) && k8sVersionFormat.MatchString(a.KubernetesMaxVersion) {
+			if compareK8sMinorVersions(a.KubernetesMinVersion, a.KubernetesMaxVersion) > 0 {
+				problems = append(problems, storedDataProblem{
+					addonName: a.Name,
+					field:     "kubernetes_min_version / kubernetes_max_version",
+					value:     a.KubernetesMinVersion + " / " + a.KubernetesMaxVersion,
+					reason:    "min version must not exceed max version",
+				})
+			}
+		}
+
 		for key, versions := range a.KubernetesCompatibility {
 			if key == "" {
 				problems = append(problems, storedDataProblem{
@@ -169,6 +192,26 @@ func validateStoredData(addons []addon.Addon) []storedDataProblem {
 	}
 
 	return problems
+}
+
+// compareK8sMinorVersions compares two "X.Y" version strings numerically.
+// Returns negative if a < b, 0 if equal, positive if a > b.
+func compareK8sMinorVersions(a, b string) int {
+	aParts := strings.SplitN(a, ".", 2)
+	bParts := strings.SplitN(b, ".", 2)
+	aMajor, _ := strconv.Atoi(aParts[0])
+	bMajor, _ := strconv.Atoi(bParts[0])
+	if aMajor != bMajor {
+		return aMajor - bMajor
+	}
+	aMinor, bMinor := 0, 0
+	if len(aParts) > 1 {
+		aMinor, _ = strconv.Atoi(aParts[1])
+	}
+	if len(bParts) > 1 {
+		bMinor, _ = strconv.Atoi(bParts[1])
+	}
+	return aMinor - bMinor
 }
 
 func validateStoredDataOnly(addons []addon.Addon) error {
