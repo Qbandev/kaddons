@@ -655,6 +655,7 @@ func TestIsGitHubURL(t *testing.T) {
 		{"https://github.com/org/repo", true},
 		{"https://github.com/org/repo/releases", true},
 		{"https://raw.githubusercontent.com/org/repo/main/README.md", true},
+		{"https://api.github.com/repos/org/repo", true},
 		{"https://GITHUB.COM/org/repo", true},
 		{"https://docs.example.com/page", false},
 		{"https://fakegithub.com/evil", false},

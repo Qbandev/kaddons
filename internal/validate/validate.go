@@ -507,14 +507,14 @@ func portOrDefault(u *url.URL) string {
 	return ""
 }
 
-// isGitHubURL returns true if the URL's host is github.com or raw.githubusercontent.com.
+// isGitHubURL returns true if the URL's host is a GitHub domain.
 func isGitHubURL(rawURL string) bool {
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return false
 	}
 	host := strings.ToLower(u.Hostname())
-	return host == "github.com" || host == "raw.githubusercontent.com"
+	return host == "github.com" || host == "api.github.com" || host == "raw.githubusercontent.com"
 }
 
 // classifyError returns "transient" for rate-limit/timeout/server errors, "permanent" otherwise.
