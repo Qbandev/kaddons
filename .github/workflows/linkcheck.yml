@@ -26,6 +26,8 @@ jobs:
 
       - name: Run link checker
         id: check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           set +e
@@ -64,4 +66,16 @@ jobs:
             echo "Updated issue #$EXISTING"
           else
             gh issue create --title "$TITLE" --label "$LABEL" --body "$BODY"
+          fi
+
+      - name: Close issue if all checks pass
+        if: steps.check.outputs.broken == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          LABEL="broken-links"
+          EXISTING=$(gh issue list --label "$LABEL" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue close "$EXISTING" --comment "All links healthy as of $(date -u '+%Y-%m-%d %H:%M UTC'). Closing automatically."
           fi
