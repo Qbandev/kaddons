@@ -355,9 +355,10 @@ func Run(linksOnly, matrixOnly, storedOnly bool) error {
 				return fmt.Errorf("too many redirects")
 			}
 			original := via[0]
-			if req.URL.Host != original.URL.Host ||
-				req.URL.Scheme != original.URL.Scheme ||
-				req.URL.Scheme != "https" {
+			sameOrigin := req.URL.Scheme == original.URL.Scheme &&
+				req.URL.Hostname() == original.URL.Hostname() &&
+				portOrDefault(req.URL) == portOrDefault(original.URL)
+			if !sameOrigin || req.URL.Scheme != "https" {
 				req.Header.Del("Authorization")
 			}
 			return nil
@@ -490,6 +491,20 @@ func doRequestWithRetry(ctx context.Context, client *http.Client, request *http.
 		Multiplier:   2,
 	}
 	return resilience.DoHTTPRequestWithRetry(ctx, client, request, policy)
+}
+
+// portOrDefault returns the explicit port from a URL, or the default port for the scheme.
+func portOrDefault(u *url.URL) string {
+	if p := u.Port(); p != "" {
+		return p
+	}
+	if u.Scheme == "https" {
+		return "443"
+	}
+	if u.Scheme == "http" {
+		return "80"
+	}
+	return ""
 }
 
 // isGitHubURL returns true if the URL's host is github.com or raw.githubusercontent.com.

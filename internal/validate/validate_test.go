@@ -709,9 +709,10 @@ func TestRedirectStripsAuthOnCrossHost(t *testing.T) {
 			return fmt.Errorf("too many redirects")
 		}
 		original := via[0]
-		if req.URL.Host != original.URL.Host ||
-			req.URL.Scheme != original.URL.Scheme ||
-			req.URL.Scheme != "https" {
+		sameOrigin := req.URL.Scheme == original.URL.Scheme &&
+			req.URL.Hostname() == original.URL.Hostname() &&
+			portOrDefault(req.URL) == portOrDefault(original.URL)
+		if !sameOrigin || req.URL.Scheme != "https" {
 			req.Header.Del("Authorization")
 		}
 		return nil
@@ -724,6 +725,7 @@ func TestRedirectStripsAuthOnCrossHost(t *testing.T) {
 		wantAuth   bool
 	}{
 		{"same host HTTPS", "https://github.com/a", "https://github.com/b", true},
+		{"same host explicit port", "https://github.com/a", "https://github.com:443/b", true},
 		{"cross host", "https://github.com/a", "https://cdn.example.com/b", false},
 		{"scheme downgrade", "https://github.com/a", "http://github.com/a", false},
 		{"cross host and scheme", "https://github.com/a", "http://evil.com/b", false},
