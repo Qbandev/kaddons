@@ -289,7 +289,7 @@
       "compatibility_matrix_url": "https://fluxcd.io/flux/installation/",
       "changelog_location": "https://github.com/fluxcd/notification-controller/releases",
       "kubernetes_compatibility": {
-        "2.0.x": [
+        "2.0.0-2.99.99": [
           "1.33",
           "1.34",
           "1.35"
@@ -317,7 +317,7 @@
       "compatibility_matrix_url": "https://fluxcd.io/flux/installation/",
       "changelog_location": "https://github.com/fluxcd/image-reflector-controller/releases",
       "kubernetes_compatibility": {
-        "2.0.x": [
+        "2.0.0-2.99.99": [
           "1.33",
           "1.34",
           "1.35"
@@ -1086,7 +1086,7 @@
       "compatibility_matrix_url": "https://github.com/kubernetes-sigs/external-dns#kubernetes-version-compatibility",
       "changelog_location": "https://github.com/kubernetes-sigs/external-dns/releases",
       "kubernetes_compatibility": {
-        "0.9.x": [
+        "0.0.0-0.9.99": [
           "1.18"
         ],
         "0.10.0-0.17.99": [
@@ -1377,7 +1377,7 @@
       "compatibility_matrix_url": "https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-overview.html",
       "changelog_location": "https://github.com/elastic/cloud-on-k8s/releases",
       "kubernetes_compatibility": {
-        "3.0.x": [
+        "3.0.0-3.99.99": [
           "1.28",
           "1.29",
           "1.30",
@@ -1387,7 +1387,7 @@
           "1.34",
           "1.35"
         ],
-        "2.0.x": [
+        "2.0.0-2.99.99": [
           "1.27",
           "1.28",
           "1.29",
@@ -4945,7 +4945,7 @@
       "compatibility_matrix_url": "https://fluxcd.io/flux/installation/#prerequisites",
       "changelog_location": "https://github.com/fluxcd/flux2/releases",
       "kubernetes_compatibility": {
-        "2.0.x": [
+        "2.0.0-2.99.99": [
           "1.33",
           "1.34",
           "1.35"
