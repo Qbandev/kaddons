@@ -3,6 +3,7 @@ package validate
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -699,6 +700,55 @@ func TestCheckURL_SetsGitHubAuthHeader(t *testing.T) {
 	}
 }
 
+// --- redirect auth stripping tests ---
+
+func TestRedirectStripsAuthOnCrossHost(t *testing.T) {
+	// Simulate the CheckRedirect function from Run().
+	checkRedirect := func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return fmt.Errorf("too many redirects")
+		}
+		original := via[0]
+		if req.URL.Host != original.URL.Host ||
+			req.URL.Scheme != original.URL.Scheme ||
+			req.URL.Scheme != "https" {
+			req.Header.Del("Authorization")
+		}
+		return nil
+	}
+
+	tests := []struct {
+		name       string
+		origURL    string
+		redirURL   string
+		wantAuth   bool
+	}{
+		{"same host HTTPS", "https://github.com/a", "https://github.com/b", true},
+		{"cross host", "https://github.com/a", "https://cdn.example.com/b", false},
+		{"scheme downgrade", "https://github.com/a", "http://github.com/a", false},
+		{"cross host and scheme", "https://github.com/a", "http://evil.com/b", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			origReq, _ := http.NewRequest("GET", tt.origURL, nil)
+			origReq.Header.Set("Authorization", "Bearer token")
+
+			redirReq, _ := http.NewRequest("GET", tt.redirURL, nil)
+			redirReq.Header.Set("Authorization", "Bearer token")
+
+			err := checkRedirect(redirReq, []*http.Request{origReq})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			hasAuth := redirReq.Header.Get("Authorization") != ""
+			if hasAuth != tt.wantAuth {
+				t.Errorf("Authorization present = %v, want %v", hasAuth, tt.wantAuth)
+			}
+		})
+	}
+}
+
 // --- classifyError tests ---
 
 func TestClassifyError(t *testing.T) {
@@ -707,6 +757,7 @@ func TestClassifyError(t *testing.T) {
 		errMsg    string
 		wantClass string
 	}{
+		{"HTTP 408", "HTTP 408", "transient"},
 		{"HTTP 429", "HTTP 429", "transient"},
 		{"HTTP 500", "HTTP 500", "transient"},
 		{"HTTP 502", "HTTP 502", "transient"},

@@ -354,7 +354,10 @@ func Run(linksOnly, matrixOnly, storedOnly bool) error {
 			if len(via) >= 10 {
 				return fmt.Errorf("too many redirects")
 			}
-			if req.URL.Host != via[0].URL.Host {
+			original := via[0]
+			if req.URL.Host != original.URL.Host ||
+				req.URL.Scheme != original.URL.Scheme ||
+				req.URL.Scheme != "https" {
 				req.Header.Del("Authorization")
 			}
 			return nil
@@ -506,7 +509,7 @@ func classifyError(reachError string) string {
 		parts := strings.Fields(reachError)
 		if len(parts) >= 2 {
 			if code, err := strconv.Atoi(parts[1]); err == nil {
-				if code == http.StatusTooManyRequests || (code >= 500 && code < 600) {
+				if code == http.StatusRequestTimeout || code == http.StatusTooManyRequests || (code >= 500 && code < 600) {
 					return "transient"
 				}
 			}

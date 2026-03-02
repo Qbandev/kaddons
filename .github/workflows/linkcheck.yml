@@ -74,8 +74,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          TITLE="Broken links in k8s_universal_addons.json"
           LABEL="broken-links"
-          EXISTING=$(gh issue list --label "$LABEL" --state open --json number --jq '.[0].number // empty')
+          EXISTING=$(gh issue list --label "$LABEL" --state open --json number,title --jq ".[] | select(.title == \"$TITLE\") | .number" | head -1)
           if [ -n "$EXISTING" ]; then
             gh issue close "$EXISTING" --comment "All links healthy as of $(date -u '+%Y-%m-%d %H:%M UTC'). Closing automatically."
           fi
