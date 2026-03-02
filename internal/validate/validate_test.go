@@ -3,6 +3,7 @@ package validate
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -35,7 +36,7 @@ func TestCheckURL_Success(t *testing.T) {
 			return httpResponse(http.StatusOK), nil
 		}),
 	}
-	if got := checkURL(context.Background(), client, "https://docs.example.com/page"); got != "ok" {
+	if got := checkURL(context.Background(), client, "https://docs.example.com/page", ""); got != "ok" {
 		t.Errorf("checkURL(200) = %q, want %q", got, "ok")
 	}
 }
@@ -47,7 +48,7 @@ func TestCheckURL_NotFound(t *testing.T) {
 			return httpResponse(http.StatusNotFound), nil
 		}),
 	}
-	if got := checkURL(context.Background(), client, "https://docs.example.com/page"); got != "HTTP 404" {
+	if got := checkURL(context.Background(), client, "https://docs.example.com/page", ""); got != "HTTP 404" {
 		t.Errorf("checkURL(404) = %q, want %q", got, "HTTP 404")
 	}
 }
@@ -59,7 +60,7 @@ func TestCheckURL_ServerError(t *testing.T) {
 			return httpResponse(http.StatusInternalServerError), nil
 		}),
 	}
-	if got := checkURL(context.Background(), client, "https://docs.example.com/page"); got != "HTTP 500" {
+	if got := checkURL(context.Background(), client, "https://docs.example.com/page", ""); got != "HTTP 500" {
 		t.Errorf("checkURL(500) = %q, want %q", got, "HTTP 500")
 	}
 }
@@ -74,7 +75,7 @@ func TestCheckURL_HeadRejectedFallsBackToGet(t *testing.T) {
 			return httpResponse(http.StatusOK), nil
 		}),
 	}
-	if got := checkURL(context.Background(), client, "https://docs.example.com/page"); got != "ok" {
+	if got := checkURL(context.Background(), client, "https://docs.example.com/page", ""); got != "ok" {
 		t.Errorf("checkURL(HEAD 405 → GET 200) = %q, want %q", got, "ok")
 	}
 }
@@ -89,7 +90,7 @@ func TestCheckURL_ForbiddenFallsBackToGet(t *testing.T) {
 			return httpResponse(http.StatusOK), nil
 		}),
 	}
-	if got := checkURL(context.Background(), client, "https://docs.example.com/page"); got != "ok" {
+	if got := checkURL(context.Background(), client, "https://docs.example.com/page", ""); got != "ok" {
 		t.Errorf("checkURL(HEAD 403 → GET 200) = %q, want %q", got, "ok")
 	}
 }
@@ -104,7 +105,7 @@ func TestCheckURL_FallbackGetAlsoFails(t *testing.T) {
 			return httpResponse(http.StatusNotFound), nil
 		}),
 	}
-	if got := checkURL(context.Background(), client, "https://docs.example.com/page"); got != "HTTP 404" {
+	if got := checkURL(context.Background(), client, "https://docs.example.com/page", ""); got != "HTTP 404" {
 		t.Errorf("checkURL(HEAD 405 → GET 404) = %q, want %q", got, "HTTP 404")
 	}
 }
@@ -116,7 +117,7 @@ func TestCheckURL_ConnectionError(t *testing.T) {
 			return nil, context.DeadlineExceeded
 		}),
 	}
-	got := checkURL(context.Background(), client, "https://docs.example.com/page")
+	got := checkURL(context.Background(), client, "https://docs.example.com/page", "")
 	if got == "ok" {
 		t.Error("checkURL(unreachable) should not return ok")
 	}
@@ -124,7 +125,7 @@ func TestCheckURL_ConnectionError(t *testing.T) {
 
 func TestCheckURL_UnsupportedScheme(t *testing.T) {
 	client := &http.Client{Timeout: 5 * time.Second}
-	got := checkURL(context.Background(), client, "http://docs.example.com/page")
+	got := checkURL(context.Background(), client, "http://docs.example.com/page", "")
 	if got == "ok" {
 		t.Error("checkURL(unsupported scheme) should not return ok")
 	}
@@ -139,7 +140,7 @@ func TestCheckURL_SetsUserAgent(t *testing.T) {
 			return httpResponse(http.StatusOK), nil
 		}),
 	}
-	checkURL(context.Background(), client, "https://docs.example.com/page")
+	checkURL(context.Background(), client, "https://docs.example.com/page", "")
 	if gotUA != "kaddons-validate/1.0" {
 		t.Errorf("User-Agent = %q, want %q", gotUA, "kaddons-validate/1.0")
 	}
@@ -641,5 +642,187 @@ func TestMatrixOnlyFlag(t *testing.T) {
 	}
 	if !task.needsContent {
 		t.Error("expected needsContent=true for matrix task")
+	}
+}
+
+// --- isGitHubURL tests ---
+
+func TestIsGitHubURL(t *testing.T) {
+	tests := []struct {
+		url  string
+		want bool
+	}{
+		{"https://github.com/org/repo", true},
+		{"https://github.com/org/repo/releases", true},
+		{"https://raw.githubusercontent.com/org/repo/main/README.md", true},
+		{"https://api.github.com/repos/org/repo", true},
+		{"https://GITHUB.COM/org/repo", true},
+		{"https://docs.example.com/page", false},
+		{"https://fakegithub.com/evil", false},
+		{"https://notgithub.com", false},
+		{"not-a-url", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.url, func(t *testing.T) {
+			if got := isGitHubURL(tt.url); got != tt.want {
+				t.Errorf("isGitHubURL(%q) = %v, want %v", tt.url, got, tt.want)
+			}
+		})
+	}
+}
+
+// --- checkURL GitHub auth header tests ---
+
+func TestCheckURL_SetsGitHubAuthHeader(t *testing.T) {
+	var gotAuth string
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			gotAuth = req.Header.Get("Authorization")
+			return httpResponse(http.StatusOK), nil
+		}),
+	}
+
+	checkURL(context.Background(), client, "https://github.com/org/repo", "test-token-123")
+	if gotAuth != "Bearer test-token-123" {
+		t.Errorf("Authorization header = %q, want %q", gotAuth, "Bearer test-token-123")
+	}
+
+	gotAuth = ""
+	checkURL(context.Background(), client, "https://docs.example.com/page", "test-token-123")
+	if gotAuth != "" {
+		t.Errorf("Authorization header for non-GitHub URL = %q, want empty", gotAuth)
+	}
+
+	gotAuth = ""
+	checkURL(context.Background(), client, "https://github.com/org/repo", "")
+	if gotAuth != "" {
+		t.Errorf("Authorization header with empty token = %q, want empty", gotAuth)
+	}
+}
+
+// --- redirect auth stripping tests ---
+
+func TestRedirectStripsAuthOnCrossHost(t *testing.T) {
+	// Simulate the CheckRedirect function from Run().
+	checkRedirect := func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 10 {
+			return fmt.Errorf("too many redirects")
+		}
+		original := via[0]
+		sameOrigin := req.URL.Scheme == original.URL.Scheme &&
+			req.URL.Hostname() == original.URL.Hostname() &&
+			portOrDefault(req.URL) == portOrDefault(original.URL)
+		if !sameOrigin || req.URL.Scheme != "https" {
+			req.Header.Del("Authorization")
+		}
+		return nil
+	}
+
+	tests := []struct {
+		name       string
+		origURL    string
+		redirURL   string
+		wantAuth   bool
+	}{
+		{"same host HTTPS", "https://github.com/a", "https://github.com/b", true},
+		{"same host explicit port", "https://github.com/a", "https://github.com:443/b", true},
+		{"cross host", "https://github.com/a", "https://cdn.example.com/b", false},
+		{"scheme downgrade", "https://github.com/a", "http://github.com/a", false},
+		{"cross host and scheme", "https://github.com/a", "http://evil.com/b", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			origReq, _ := http.NewRequest("GET", tt.origURL, nil)
+			origReq.Header.Set("Authorization", "Bearer token")
+
+			redirReq, _ := http.NewRequest("GET", tt.redirURL, nil)
+			redirReq.Header.Set("Authorization", "Bearer token")
+
+			err := checkRedirect(redirReq, []*http.Request{origReq})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			hasAuth := redirReq.Header.Get("Authorization") != ""
+			if hasAuth != tt.wantAuth {
+				t.Errorf("Authorization present = %v, want %v", hasAuth, tt.wantAuth)
+			}
+		})
+	}
+}
+
+// --- classifyError tests ---
+
+func TestClassifyError(t *testing.T) {
+	tests := []struct {
+		name      string
+		errMsg    string
+		wantClass string
+	}{
+		{"HTTP 408", "HTTP 408", "transient"},
+		{"HTTP 429", "HTTP 429", "transient"},
+		{"HTTP 500", "HTTP 500", "transient"},
+		{"HTTP 502", "HTTP 502", "transient"},
+		{"HTTP 503", "HTTP 503", "transient"},
+		{"timeout error", "error: context deadline exceeded", "transient"},
+		{"connection refused", "error: dial tcp: connection refused", "transient"},
+		{"connection reset", "error: read: connection reset by peer", "transient"},
+		{"HTTP 404", "HTTP 404", "permanent"},
+		{"HTTP 403", "HTTP 403", "permanent"},
+		{"DNS error", "error: no such host", "permanent"},
+		{"TLS error", "error: tls: certificate has expired", "permanent"},
+		{"too many redirects", "error: too many redirects", "permanent"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := classifyError(tt.errMsg); got != tt.wantClass {
+				t.Errorf("classifyError(%q) = %q, want %q", tt.errMsg, got, tt.wantClass)
+			}
+		})
+	}
+}
+
+// --- report transient/permanent separation tests ---
+
+func TestReport_SeparatesTransientAndPermanent(t *testing.T) {
+	tasks := map[string]*urlTask{
+		"https://github.com/org/repo": {
+			url:          "https://github.com/org/repo",
+			needsContent: false,
+			consumers:    []consumer{{addonName: "addon-a", field: "repository"}},
+		},
+		"https://example.com/dead": {
+			url:          "https://example.com/dead",
+			needsContent: false,
+			consumers:    []consumer{{addonName: "addon-b", field: "project_url"}},
+		},
+	}
+	results := map[string]*urlResult{
+		"https://github.com/org/repo": {reachable: false, reachError: "HTTP 429"},
+		"https://example.com/dead":    {reachable: false, reachError: "HTTP 404"},
+	}
+
+	err := report(tasks, results, true)
+	if !errors.Is(err, ErrValidationFailed) {
+		t.Fatalf("expected ErrValidationFailed, got %v", err)
+	}
+}
+
+func TestReport_AllTransient(t *testing.T) {
+	tasks := map[string]*urlTask{
+		"https://github.com/org/repo": {
+			url:          "https://github.com/org/repo",
+			needsContent: false,
+			consumers:    []consumer{{addonName: "addon-a", field: "repository"}},
+		},
+	}
+	results := map[string]*urlResult{
+		"https://github.com/org/repo": {reachable: false, reachError: "HTTP 429"},
+	}
+
+	err := report(tasks, results, true)
+	if !errors.Is(err, ErrValidationFailed) {
+		t.Fatalf("expected ErrValidationFailed, got %v", err)
 	}
 }

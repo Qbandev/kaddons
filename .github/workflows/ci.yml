@@ -56,6 +56,8 @@ jobs:
         with:
           go-version: '1.25.7'
           cache: true
+      - name: Validate stored compatibility data
+        run: go run ./cmd/kaddons-validate --stored-only
       - name: Validate compatibility matrix coverage (advisory)
         continue-on-error: true
         run: go run ./cmd/kaddons-validate --matrix

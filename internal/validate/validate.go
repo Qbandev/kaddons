@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"regexp"
@@ -353,6 +354,13 @@ func Run(linksOnly, matrixOnly, storedOnly bool) error {
 			if len(via) >= 10 {
 				return fmt.Errorf("too many redirects")
 			}
+			original := via[0]
+			sameOrigin := req.URL.Scheme == original.URL.Scheme &&
+				req.URL.Hostname() == original.URL.Hostname() &&
+				portOrDefault(req.URL) == portOrDefault(original.URL)
+			if !sameOrigin || req.URL.Scheme != "https" {
+				req.Header.Del("Authorization")
+			}
 			return nil
 		},
 	}
@@ -363,6 +371,8 @@ func Run(linksOnly, matrixOnly, storedOnly bool) error {
 		wg  sync.WaitGroup
 		sem = make(chan struct{}, 10)
 	)
+
+	githubToken := os.Getenv("GITHUB_TOKEN")
 
 	fmt.Fprintf(os.Stderr, "Validating %d unique URLs across %d addons...\n", len(tasks), len(addons))
 
@@ -376,7 +386,7 @@ func Run(linksOnly, matrixOnly, storedOnly bool) error {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			result := executeTask(ctx, client, task)
+			result := executeTask(ctx, client, task, githubToken)
 
 			mu.Lock()
 			results[task.url] = result
@@ -396,8 +406,10 @@ func Run(linksOnly, matrixOnly, storedOnly bool) error {
 }
 
 // executeTask processes a single URL task.
-func executeTask(ctx context.Context, client *http.Client, task *urlTask) *urlResult {
+func executeTask(ctx context.Context, client *http.Client, task *urlTask, githubToken string) *urlResult {
 	if task.needsContent {
+		// Auth token not passed here: the --links workflow sets needsContent=false
+		// for all tasks, so this path is never hit during linkcheck runs.
 		content, err := fetch.CompatibilityPageWithClient(ctx, client, task.url)
 		if err != nil {
 			return &urlResult{reachable: false, reachError: fmt.Sprintf("error: %v", err)}
@@ -408,7 +420,7 @@ func executeTask(ctx context.Context, client *http.Client, task *urlTask) *urlRe
 		}
 	}
 
-	status := checkURL(ctx, client, task.url)
+	status := checkURL(ctx, client, task.url, githubToken)
 	if status != "ok" {
 		return &urlResult{reachable: false, reachError: status}
 	}
@@ -416,7 +428,7 @@ func executeTask(ctx context.Context, client *http.Client, task *urlTask) *urlRe
 }
 
 // checkURL performs an HTTP HEAD request with GET fallback on 405/403.
-func checkURL(ctx context.Context, client *http.Client, rawURL string) string {
+func checkURL(ctx context.Context, client *http.Client, rawURL string, githubToken string) string {
 	if err := fetch.ValidatePublicHTTPSURL(rawURL); err != nil {
 		return err.Error()
 	}
@@ -426,6 +438,9 @@ func checkURL(ctx context.Context, client *http.Client, rawURL string) string {
 		return fmt.Sprintf("invalid URL: %v", err)
 	}
 	req.Header.Set("User-Agent", "kaddons-validate/1.0")
+	if githubToken != "" && isGitHubURL(rawURL) {
+		req.Header.Set("Authorization", "Bearer "+githubToken)
+	}
 
 	resp, err := doRequestWithRetry(ctx, client, req)
 	if err != nil {
@@ -441,6 +456,9 @@ func checkURL(ctx context.Context, client *http.Client, rawURL string) string {
 			return fmt.Sprintf("invalid URL: %v", err)
 		}
 		getReq.Header.Set("User-Agent", "kaddons-validate/1.0")
+		if githubToken != "" && isGitHubURL(rawURL) {
+			getReq.Header.Set("Authorization", "Bearer "+githubToken)
+		}
 
 		resp2, err := doRequestWithRetry(ctx, client, getReq)
 		if err != nil {
@@ -473,6 +491,55 @@ func doRequestWithRetry(ctx context.Context, client *http.Client, request *http.
 		Multiplier:   2,
 	}
 	return resilience.DoHTTPRequestWithRetry(ctx, client, request, policy)
+}
+
+// portOrDefault returns the explicit port from a URL, or the default port for the scheme.
+func portOrDefault(u *url.URL) string {
+	if p := u.Port(); p != "" {
+		return p
+	}
+	if u.Scheme == "https" {
+		return "443"
+	}
+	if u.Scheme == "http" {
+		return "80"
+	}
+	return ""
+}
+
+// isGitHubURL returns true if the URL's host is a GitHub domain.
+func isGitHubURL(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	return host == "github.com" || host == "api.github.com" || host == "raw.githubusercontent.com"
+}
+
+// classifyError returns "transient" for rate-limit/timeout/server errors, "permanent" otherwise.
+func classifyError(reachError string) string {
+	// HTTP status code based classification (429 rate-limit, 5xx server errors).
+	if strings.HasPrefix(reachError, "HTTP ") {
+		parts := strings.Fields(reachError)
+		if len(parts) >= 2 {
+			if code, err := strconv.Atoi(parts[1]); err == nil {
+				if code == http.StatusRequestTimeout || code == http.StatusTooManyRequests || (code >= 500 && code < 600) {
+					return "transient"
+				}
+			}
+		}
+	}
+
+	lower := strings.ToLower(reachError)
+
+	for _, keyword := range []string{"timeout", "deadline exceeded", "connection refused", "connection reset"} {
+		if strings.Contains(lower, keyword) {
+			return "transient"
+		}
+	}
+
+	return "permanent"
 }
 
 // ClassifyK8sMatrix returns the tier of K8s compatibility data found in page content.
@@ -550,6 +617,15 @@ func report(tasks map[string]*urlTask, results map[string]*urlResult, linksOnly 
 		}
 	}
 
+	var permanentBroken, transientBroken []brokenLink
+	for _, b := range broken {
+		if classifyError(b.errMsg) == "transient" {
+			transientBroken = append(transientBroken, b)
+		} else {
+			permanentBroken = append(permanentBroken, b)
+		}
+	}
+
 	hasFailures := len(broken) > 0 || len(matrixProblems) > 0
 
 	if !hasFailures {
@@ -561,17 +637,41 @@ func report(tasks map[string]*urlTask, results map[string]*urlResult, linksOnly 
 		return nil
 	}
 
-	if len(broken) > 0 {
+	if len(permanentBroken) > 0 {
 		addonSet := make(map[string]struct{})
-		for _, b := range broken {
+		for _, b := range permanentBroken {
 			addonSet[b.addonName] = struct{}{}
 		}
-		fmt.Printf("Found **%d** broken links across **%d** addons.\n\n", len(broken), len(addonSet))
+		fmt.Printf("Found **%d** broken links across **%d** addons.\n\n", len(permanentBroken), len(addonSet))
 		fmt.Println("| Addon Name | Field | URL | Error |")
 		fmt.Println("|------------|-------|-----|-------|")
-		for _, b := range broken {
+		for _, b := range permanentBroken {
 			fmt.Printf("| %s | `%s` | %s | %s |\n", b.addonName, b.field, b.url, b.errMsg)
 		}
+	}
+
+	if len(transientBroken) > 0 {
+		if len(permanentBroken) > 0 {
+			fmt.Println()
+		}
+		fmt.Println("<details>")
+		addonSet := make(map[string]struct{})
+		for _, b := range transientBroken {
+			addonSet[b.addonName] = struct{}{}
+		}
+		fmt.Printf("<summary>%d transient failures across %d addons (rate limiting / timeouts)</summary>\n\n", len(transientBroken), len(addonSet))
+		fmt.Println("| Addon Name | Field | URL | Error |")
+		fmt.Println("|------------|-------|-----|-------|")
+		for _, b := range transientBroken {
+			fmt.Printf("| %s | `%s` | %s | %s |\n", b.addonName, b.field, b.url, b.errMsg)
+		}
+		fmt.Println()
+		fmt.Println("</details>")
+	}
+
+	if len(permanentBroken) == 0 && len(transientBroken) > 0 && len(matrixProblems) == 0 {
+		fmt.Println()
+		fmt.Println("All failures are transient (rate limiting / timeouts). No permanent broken links detected.")
 	}
 
 	if len(matrixProblems) > 0 {
