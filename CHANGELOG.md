@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/Qbandev/kaddons/compare/v0.4.1...v0.4.2) (2026-03-02)
+
+
+### Bug Fixes
+
+* improve linkcheck workflow after PR [#35](https://github.com/Qbandev/kaddons/issues/35) learnings ([#36](https://github.com/Qbandev/kaddons/issues/36)) ([3709d32](https://github.com/Qbandev/kaddons/commit/3709d32f5b2f5f4ecee3c30e5b7930af1bdcb0be))
+
 ## [0.4.1](https://github.com/Qbandev/kaddons/compare/v0.4.0...v0.4.1) (2026-02-27)
 
 
