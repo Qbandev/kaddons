@@ -289,7 +289,7 @@
       "compatibility_matrix_url": "https://fluxcd.io/flux/installation/",
       "changelog_location": "https://github.com/fluxcd/notification-controller/releases",
       "kubernetes_compatibility": {
-        "2.x": [
+        "2.0.0-2.99.99": [
           "1.33",
           "1.34",
           "1.35"
@@ -317,7 +317,7 @@
       "compatibility_matrix_url": "https://fluxcd.io/flux/installation/",
       "changelog_location": "https://github.com/fluxcd/image-reflector-controller/releases",
       "kubernetes_compatibility": {
-        "2.x": [
+        "2.0.0-2.99.99": [
           "1.33",
           "1.34",
           "1.35"
@@ -736,22 +736,22 @@
       "compatibility_matrix_url": "https://github.com/kubernetes-sigs/cloud-provider-azure#readme",
       "changelog_location": "https://github.com/kubernetes-sigs/cloud-provider-azure/releases",
       "kubernetes_compatibility": {
-        "v1.33.z": [
+        "v1.33.x": [
           "1.33"
         ],
-        "v1.32.z": [
+        "v1.32.x": [
           "1.32"
         ],
-        "v1.31.z": [
+        "v1.31.x": [
           "1.31"
         ],
-        "v1.30.z": [
+        "v1.30.x": [
           "1.30"
         ],
-        "v1.29.z": [
+        "v1.29.x": [
           "1.29"
         ],
-        "v1.28.z": [
+        "v1.28.x": [
           "1.28"
         ]
       }
@@ -1086,15 +1086,15 @@
       "compatibility_matrix_url": "https://github.com/kubernetes-sigs/external-dns#kubernetes-version-compatibility",
       "changelog_location": "https://github.com/kubernetes-sigs/external-dns/releases",
       "kubernetes_compatibility": {
-        "\u22640.9.x": [
+        "0.0.0-0.9.99": [
           "1.18"
         ],
-        "\u22650.10.x and \u22640.17.x": [
+        "0.10.0-0.17.99": [
           "1.19",
           "1.20",
           "1.21"
         ],
-        "\u22650.18.x": [
+        ">=0.18.0": [
           "1.21",
           "1.22",
           "1.23",
@@ -1288,7 +1288,7 @@
     },
     {
       "name": "EMQX Operator",
-      "project_url": "https://www.emqx.io/docs/en/latest/deploy/install-introduction.html",
+      "project_url": "https://github.com/emqx/emqx-operator",
       "repository": "https://github.com/emqx/emqx-operator",
       "compatibility_matrix_url": "https://github.com/emqx/emqx-operator#readme",
       "changelog_location": "https://github.com/emqx/emqx-operator/releases",
@@ -1377,7 +1377,7 @@
       "compatibility_matrix_url": "https://www.elastic.co/guide/en/cloud-on-k8s/current/k8s-overview.html",
       "changelog_location": "https://github.com/elastic/cloud-on-k8s/releases",
       "kubernetes_compatibility": {
-        "3.x": [
+        "3.0.0-3.99.99": [
           "1.28",
           "1.29",
           "1.30",
@@ -1387,7 +1387,7 @@
           "1.34",
           "1.35"
         ],
-        "2.x": [
+        "2.0.0-2.99.99": [
           "1.27",
           "1.28",
           "1.29",
@@ -2719,10 +2719,10 @@
     },
     {
       "name": "Calisti (formerly Backyards)",
-      "project_url": "https://docs.calisti.app/docs/",
+      "project_url": "https://github.com/cisco-open/libnasp",
       "repository": "https://github.com/cisco-open/libnasp",
-      "compatibility_matrix_url": "https://docs.calisti.app/docs/",
-      "changelog_location": "https://docs.calisti.app/docs/"
+      "compatibility_matrix_url": "https://github.com/cisco-open/libnasp",
+      "changelog_location": "https://github.com/cisco-open/libnasp/releases"
     },
     {
       "name": "Meshery",
@@ -2881,7 +2881,7 @@
     },
     {
       "name": "Membrane API Gateway",
-      "project_url": "https://membrane-soa.org/",
+      "project_url": "https://github.com/membrane/api-gateway",
       "repository": "https://github.com/membrane/api-gateway",
       "compatibility_matrix_url": "https://github.com/membrane/api-gateway/blob/master/README.md",
       "changelog_location": "https://github.com/membrane/api-gateway/releases"
@@ -3506,10 +3506,10 @@
     },
     {
       "name": "DeepFlow",
-      "project_url": "https://deepflow.io/docs/",
-      "repository": "https://github.com/deepflowys/deepflow",
-      "compatibility_matrix_url": "https://deepflow.io/docs/ce-install/overview/",
-      "changelog_location": "https://github.com/deepflowys/deepflow/releases"
+      "project_url": "https://github.com/deepflowio/deepflow",
+      "repository": "https://github.com/deepflowio/deepflow",
+      "compatibility_matrix_url": "https://github.com/deepflowio/deepflow#readme",
+      "changelog_location": "https://github.com/deepflowio/deepflow/releases"
     },
     {
       "name": "EaseAgent",
@@ -4206,7 +4206,7 @@
       "name": "Parseable",
       "project_url": "https://www.parseable.io",
       "repository": "https://github.com/parseablehq/parseable",
-      "compatibility_matrix_url": "https://www.parseable.com/docs/server/installation/standalone/setup-parseable-on-kubernetes-via-helm",
+      "compatibility_matrix_url": "https://github.com/parseablehq/parseable#readme",
       "changelog_location": "https://github.com/parseablehq/parseable/releases"
     },
     {
@@ -4945,7 +4945,7 @@
       "compatibility_matrix_url": "https://fluxcd.io/flux/installation/#prerequisites",
       "changelog_location": "https://github.com/fluxcd/flux2/releases",
       "kubernetes_compatibility": {
-        "2.x": [
+        "2.0.0-2.99.99": [
           "1.33",
           "1.34",
           "1.35"
@@ -5097,7 +5097,7 @@
       "name": "go-zero",
       "project_url": "https://go-zero.dev/",
       "repository": "https://github.com/zeromicro/go-zero",
-      "compatibility_matrix_url": "https://go-zero.dev/en/docs/tasks",
+      "compatibility_matrix_url": "https://github.com/zeromicro/go-zero#readme",
       "changelog_location": "https://github.com/zeromicro/go-zero/releases"
     },
     {
@@ -5656,7 +5656,7 @@
     },
     {
       "name": "Serverless Devs",
-      "project_url": "https://www.serverless-devs.com/",
+      "project_url": "https://github.com/serverless-devs/serverless-devs",
       "repository": "https://github.com/serverless-devs/serverless-devs",
       "compatibility_matrix_url": "https://github.com/Serverless-Devs/Serverless-Devs#readme",
       "changelog_location": "https://github.com/serverless-devs/serverless-devs/releases"
@@ -5888,7 +5888,7 @@
     },
     {
       "name": "Flomesh Service Mesh (FSM)",
-      "project_url": "https://fsm-docs.flomesh.io/",
+      "project_url": "https://github.com/flomesh-io/fsm",
       "repository": "https://github.com/flomesh-io/fsm",
       "compatibility_matrix_url": "https://github.com/flomesh-io/fsm",
       "changelog_location": "https://github.com/flomesh-io/fsm/releases",
@@ -6265,7 +6265,7 @@
       "name": "OpenSergo",
       "project_url": "https://opensergo.io/",
       "repository": "https://github.com/opensergo/opensergo-specification",
-      "compatibility_matrix_url": "https://opensergo.io/docs/what-is-opensergo/intro/",
+      "compatibility_matrix_url": "https://github.com/opensergo/opensergo-specification#readme",
       "changelog_location": "https://github.com/opensergo/opensergo-specification/releases"
     },
     {
@@ -7448,47 +7448,8 @@
       "repository": "https://github.com/aquasecurity/kube-bench",
       "compatibility_matrix_url": "https://github.com/aquasecurity/kube-bench/blob/main/docs/platforms.md",
       "changelog_location": "https://github.com/aquasecurity/kube-bench/releases",
-      "kubernetes_compatibility": {
-        "cis-1.6": [
-          "1.16",
-          "1.17",
-          "1.18"
-        ],
-        "cis-1.20": [
-          "1.19",
-          "1.20",
-          "1.21"
-        ],
-        "cis-1.23": [
-          "1.22",
-          "1.23"
-        ],
-        "cis-1.24": [
-          "1.24"
-        ],
-        "cis-1.7": [
-          "1.25"
-        ],
-        "cis-1.8": [
-          "1.26"
-        ],
-        "cis-1.9": [
-          "1.27"
-        ],
-        "cis-1.10": [
-          "1.28"
-        ],
-        "cis-1.11": [
-          "1.29",
-          "1.30",
-          "1.31"
-        ],
-        "cis-1.12": [
-          "1.32",
-          "1.33",
-          "1.34"
-        ]
-      }
+      "kubernetes_min_version": "1.16",
+      "kubernetes_max_version": "1.34"
     },
     {
       "name": "kube-hunter",
@@ -7878,7 +7839,7 @@
       "name": "OpenIO",
       "project_url": "https://docs.openio.io/",
       "repository": "https://github.com/open-io/oio-sds",
-      "compatibility_matrix_url": "https://docs.openio.io/latest/source/sandbox-guide/installation.html",
+      "compatibility_matrix_url": "https://github.com/open-io/oio-sds#readme",
       "changelog_location": "https://github.com/open-io/oio-sds/releases"
     },
     {
