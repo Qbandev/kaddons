@@ -76,7 +76,7 @@ func LoadAddonsFromDisk(path string) ([]Addon, error) {
 	return f.Addons, nil
 }
 
-// SaveAddonsToDisk writes the addon database to a file on disk using atomic rename.
+// SaveAddonsToDisk writes the addon database to a file on disk.
 // The output format matches the embedded database: 2-space indent JSON with trailing newline.
 func SaveAddonsToDisk(path string, addons []Addon) error {
 	path = filepath.Clean(path)

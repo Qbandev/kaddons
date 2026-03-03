@@ -124,7 +124,7 @@ Two extraction strategies are applied:
 
 Extracted versions are validated: K8s versions must match `1.\d+`, addon versions must match semver-like patterns. If extraction produces a valid matrix, the addon is resolved with `data_source="extracted"` and does not proceed to LLM analysis.
 
-Extraction failure (malformed table, no matching columns, validation failure) is not an error — it falls through silently to the LLM/local path. Table processing is capped at 1000 cells to prevent pathological input from consuming memory.
+Extraction failure (malformed table, no matching columns, validation failure) is not an error — it falls through silently to the LLM/local path. Tables exceeding 1000 cells are discarded entirely (not truncated) to prevent incomplete matrices from producing incorrect verdicts.
 
 ### EOL data fetching
 
@@ -214,7 +214,7 @@ A URL returning 200 but failing regex appears only in Table 2. An unreachable ma
 cmd/kaddons/
   main.go                             CLI entrypoint (Cobra), flag parsing
 cmd/kaddons-extract/
-  main.go                             Matrix extraction cache/manifest generator (dev workflow)
+  main.go                             Matrix extraction tool: cache/manifest mode and --sync for CI-driven DB updates
 cmd/kaddons-validate/
   main.go                             DB validation tool (dev/CI only, not distributed)
 

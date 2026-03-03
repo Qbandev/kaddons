@@ -34,7 +34,7 @@ The LLM is only used in Phase 3. Phases 1 and 2 are fully deterministic.
 
 ## Language and stack
 
-- **Go** (1.25.6) — single-binary CLI, no CGO
+- **Go** (1.25.7) — single-binary CLI, no CGO
 - **Dependencies**: `spf13/cobra` (CLI), `google.golang.org/genai` (Gemini API)
 - **No config files** — flags and optional `GEMINI_API_KEY` env var only
 - **CI**: GitHub Actions (test, lint, security scan, release via GoReleaser)
@@ -42,6 +42,7 @@ The LLM is only used in Phase 3. Phases 1 and 2 are fully deterministic.
 ## Build and test
 
 ```bash
+make check                  # Run all local CI checks (vet, lint, test, govulncheck, build, validate)
 make build                  # Build binary with version metadata
 go test -v -race ./...      # Run all tests with race detector
 go vet ./...                # Static analysis
@@ -49,6 +50,7 @@ make validate                           # Check all DB URLs + matrix content (no
 go run ./cmd/kaddons-validate --links   # Only URL reachability
 go run ./cmd/kaddons-validate --matrix  # Only matrix content validation
 make sync                           # Extract compatibility matrices and update addon DB
+make gosec                          # Run gosec security scan (requires Go 1.25.x)
 ```
 
 ## Code conventions
@@ -94,7 +96,7 @@ The Gemini model sometimes returns booleans instead of strings, or wraps JSON in
 
 ### Modifying the matching algorithm
 
-The six-pass algorithm in `LookupAddon` is order-sensitive — earlier passes take priority. Changes should be tested against the full test suite in `internal/addon/addon_test.go` which covers exact matches, normalization, suffix stripping, prefix matching, and word-subset matching.
+The seven-pass algorithm in `LookupAddon` is order-sensitive — earlier passes take priority. Changes should be tested against the full test suite in `internal/addon/addon_test.go` which covers exact matches, normalization, suffix stripping, prefix matching, word-subset matching, and Levenshtein fuzzy matching.
 
 ### Modifying the LLM prompt
 

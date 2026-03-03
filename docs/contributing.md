@@ -28,7 +28,7 @@ go test -v -race ./...
 cmd/kaddons/
   main.go                             CLI entrypoint (Cobra), flags
 cmd/kaddons-extract/
-  main.go                             Matrix extraction cache/manifest generator (dev workflow)
+  main.go                             Matrix extraction tool: cache/manifest mode and --sync for CI-driven DB updates
 cmd/kaddons-validate/
   main.go                             DB validation tool (dev/CI only, not distributed)
 
@@ -116,8 +116,17 @@ If the addon is tracked on [endoflife.date](https://endoflife.date):
 
 | Target | Command | Description |
 |--------|---------|-------------|
+| `check` | `make check` | Run all local CI checks (vet, lint, test, govulncheck, build, validate) |
 | `build` | `make build` | Build binary with version metadata |
-| `validate` | `make validate` | Run DB URL + matrix validation (no cluster needed) |
+| `vet` | `make vet` | Run `go vet ./...` |
+| `lint` | `make lint` | Run golangci-lint (pinned to CI version) |
+| `test` | `make test` | Run `go test ./... -race` |
+| `govulncheck` | `make govulncheck` | Run govulncheck (pinned to CI version) |
+| `gosec` | `make gosec` | Run gosec security scan (requires Go 1.25.x) |
+| `validate` | `make validate` | Run stored-data validation (no network) |
+| `validate-live` | `make validate-live` | Run live URL + matrix validation |
+| `sync` | `make sync` | Extract compatibility matrices and update addon DB |
+| `extract` | `make extract` | Run matrix extraction cache/manifest generator |
 | `clean` | `make clean` | Remove built binary |
 | `install` | `make install` | Build and install to `/usr/local/bin` |
 | `uninstall` | `make uninstall` | Remove from `/usr/local/bin` |
