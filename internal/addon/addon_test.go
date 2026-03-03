@@ -639,6 +639,86 @@ func TestAddonJSONRoundTrip_OmitsEmptyStoredData(t *testing.T) {
 	}
 }
 
+func TestLevenshteinDistance(t *testing.T) {
+	tests := []struct {
+		a    string
+		b    string
+		want int
+	}{
+		{"", "", 0},
+		{"abc", "", 3},
+		{"", "abc", 3},
+		{"abc", "abc", 0},
+		{"cert-manager", "cert-manger", 1},
+		{"prometheus", "promethues", 2},
+		{"istio", "istio", 0},
+		{"kitten", "sitting", 3},
+	}
+	for _, tt := range tests {
+		t.Run(tt.a+"_"+tt.b, func(t *testing.T) {
+			got := levenshteinDistance(tt.a, tt.b)
+			if got != tt.want {
+				t.Errorf("levenshteinDistance(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLookupAddon_LevenshteinFuzzyMatch(t *testing.T) {
+	addons := []Addon{
+		{Name: "cert-manager"},
+		{Name: "Prometheus"},
+		{Name: "Istio"},
+	}
+
+	tests := []struct {
+		input string
+		want  string
+	}{
+		// Typo: "manger" instead of "manager" — distance 1
+		{"cert-manger", "cert-manager"},
+		// Typo: transposed letters — distance 2
+		{"promethues", "Prometheus"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			matches := LookupAddon(tt.input, addons)
+			if len(matches) != 1 {
+				t.Fatalf("LookupAddon(%q) returned %d matches, want 1", tt.input, len(matches))
+			}
+			if matches[0].Name != tt.want {
+				t.Errorf("LookupAddon(%q) = %q, want %q", tt.input, matches[0].Name, tt.want)
+			}
+		})
+	}
+}
+
+func TestLookupAddon_LevenshteinRejectsShortNames(t *testing.T) {
+	addons := []Addon{
+		{Name: "csi"},
+		{Name: "cni"},
+		{Name: "dns"},
+	}
+
+	// Short names should NOT trigger fuzzy matching even if distance is small
+	matches := LookupAddon("cse", addons)
+	if len(matches) != 0 {
+		t.Errorf("LookupAddon(cse) returned %d matches, want 0 (short name reject)", len(matches))
+	}
+}
+
+func TestLookupAddon_LevenshteinRejectsHighDistance(t *testing.T) {
+	addons := []Addon{
+		{Name: "cert-manager"},
+	}
+
+	// "totally-wrong" has high distance to "cert-manager", should not match
+	matches := LookupAddon("totally-wrong", addons)
+	if len(matches) != 0 {
+		t.Errorf("LookupAddon(totally-wrong) returned %d matches, want 0", len(matches))
+	}
+}
+
 func TestVersionMatchesCycle(t *testing.T) {
 	tests := []struct {
 		version string

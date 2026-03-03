@@ -119,6 +119,45 @@ func wordSubsetMatch(subset, superset string) bool {
 	return true
 }
 
+// levenshteinDistance computes the edit distance between two strings using the
+// Wagner–Fischer algorithm with O(min(m,n)) space. Operates on runes to
+// handle multi-byte characters correctly.
+func levenshteinDistance(a, b string) int {
+	ra, rb := []rune(a), []rune(b)
+	if len(ra) < len(rb) {
+		ra, rb = rb, ra
+	}
+	if len(rb) == 0 {
+		return len(ra)
+	}
+	prev := make([]int, len(rb)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(ra); i++ {
+		curr := make([]int, len(rb)+1)
+		curr[0] = i
+		for j := 1; j <= len(rb); j++ {
+			cost := 1
+			if ra[i-1] == rb[j-1] {
+				cost = 0
+			}
+			ins := curr[j-1] + 1
+			del := prev[j] + 1
+			sub := prev[j-1] + cost
+			curr[j] = ins
+			if del < curr[j] {
+				curr[j] = del
+			}
+			if sub < curr[j] {
+				curr[j] = sub
+			}
+		}
+		prev = curr
+	}
+	return prev[len(rb)]
+}
+
 type eolSlugAliasGroup struct {
 	productSlug string
 	addonNames  []string
@@ -306,6 +345,38 @@ func (matcher *Matcher) Match(name string) []Addon {
 			}
 		}
 	}
+	if len(matches) > 0 {
+		return matches
+	}
+
+	// Pass 7: Levenshtein fuzzy match — catch typos like "cert-manger" → "cert-manager".
+	// Strict constraints to avoid false positives on short or common names.
+	if len(normalized) >= 6 {
+		bestDist := len(normalized) // worst possible
+		var bestMatch *Addon
+		for i := range matcher.entries {
+			entry := &matcher.entries[i]
+			if len(entry.lowerName) < 6 {
+				continue
+			}
+			dist := levenshteinDistance(normalized, entry.lowerName)
+			if dist > 2 {
+				continue
+			}
+			// Distance must be less than 25% of the name length
+			if dist*4 >= len(normalized) {
+				continue
+			}
+			if dist < bestDist {
+				bestDist = dist
+				bestMatch = &entry.addon
+			}
+		}
+		if bestMatch != nil {
+			return []Addon{*bestMatch}
+		}
+	}
+
 	return matches
 }
 

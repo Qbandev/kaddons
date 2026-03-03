@@ -14,6 +14,7 @@ import (
 
 	"github.com/qbandev/kaddons/internal/addon"
 	"github.com/qbandev/kaddons/internal/cluster"
+	"github.com/qbandev/kaddons/internal/extract"
 	"github.com/qbandev/kaddons/internal/fetch"
 	"github.com/qbandev/kaddons/internal/output"
 	"github.com/qbandev/kaddons/internal/resilience"
@@ -24,6 +25,8 @@ type addonWithInfo struct {
 	cluster.DetectedAddon
 	DBMatch              *addon.Addon     `json:"db_match,omitempty"`
 	CompatibilityContent string           `json:"compatibility_content,omitempty"`
+	RawContent           string           `json:"-"`
+	IsRawContent         bool             `json:"-"`
 	CompatibilityURL     string           `json:"compatibility_url,omitempty"`
 	FetchError           string           `json:"fetch_error,omitempty"`
 	EOLData              []addon.EOLCycle `json:"eol_data,omitempty"`
@@ -142,24 +145,27 @@ func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addo
 		}
 	}
 	enriched := make([]addonWithInfo, 0, len(runtimeAddons))
-	fetchedURLs := make(map[string]string) // cache: URL -> content
+	fetchedPages := make(map[string]fetch.FetchedPage) // cache: URL -> fetched page
 	for _, addonName := range runtimeAddons {
 		entry := bestByName[addonName]
 		info := entry.info
 		if info.DBMatch.CompatibilityMatrixURL != "" {
 			info.CompatibilityURL = info.DBMatch.CompatibilityMatrixURL
-			// Skip compatibility page HTTP fetches when no API key — the LLM is the only consumer of this content
-			if hasAPIKey {
-				if cached, ok := fetchedURLs[info.CompatibilityURL]; ok {
-					info.CompatibilityContent = cached
+			// Always fetch: raw content feeds deterministic table extraction (Phase 2c)
+			// even when no LLM API key is configured.
+			if cached, ok := fetchedPages[info.CompatibilityURL]; ok {
+				info.CompatibilityContent = cached.Text
+				info.RawContent = cached.Raw
+				info.IsRawContent = cached.IsRaw
+			} else {
+				page, err := fetch.CompatibilityPageFull(ctx, info.DBMatch.CompatibilityMatrixURL)
+				if err != nil {
+					info.FetchError = err.Error()
 				} else {
-					content, err := fetch.CompatibilityPage(ctx, info.DBMatch.CompatibilityMatrixURL)
-					if err != nil {
-						info.FetchError = err.Error()
-					} else {
-						info.CompatibilityContent = content
-						fetchedURLs[info.CompatibilityURL] = content
-					}
+					info.CompatibilityContent = page.Text
+					info.RawContent = page.Raw
+					info.IsRawContent = page.IsRaw
+					fetchedPages[info.CompatibilityURL] = page
 				}
 			}
 		}
@@ -178,14 +184,38 @@ func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addo
 		return emitResults(k8sVersion, []output.AddonCompatibility{}, outputFormat, outputPath)
 	}
 
-	// Phase 3: LLM analysis — only for runtime addons
-	if len(enriched) > 0 && !hasAPIKey {
-		fmt.Fprintf(os.Stderr, "No Gemini API key configured. Producing local-only results for %d addons.\n", len(enriched))
-		localResults := resolveLocalOnly(enriched, k8sVersion)
+	// Phase 2c: Attempt deterministic table extraction before LLM
+	var extractedResults []output.AddonCompatibility
+	var remaining []addonWithInfo
+	k8sMajorMinor := normalizeK8sVersion(k8sVersion)
+	for _, info := range enriched {
+		if info.RawContent == "" {
+			remaining = append(remaining, info)
+			continue
+		}
+		matrix := tryExtractMatrix(info)
+		if matrix == nil {
+			remaining = append(remaining, info)
+			continue
+		}
+		result := resolveFromExtractedMatrix(info, matrix, k8sMajorMinor)
+		if result != nil {
+			fmt.Fprintf(os.Stderr, "Resolved %s from extracted table -> %s\n", info.Name, result.Compatible)
+			extractedResults = append(extractedResults, *result)
+		} else {
+			remaining = append(remaining, info)
+		}
+	}
+	storedResults = append(storedResults, extractedResults...)
+
+	// Phase 3: LLM analysis — only for remaining addons
+	if len(remaining) > 0 && !hasAPIKey {
+		fmt.Fprintf(os.Stderr, "No Gemini API key configured. Producing local-only results for %d addons.\n", len(remaining))
+		localResults := resolveLocalOnly(remaining, k8sVersion)
 		return emitResults(k8sVersion, append(storedResults, localResults...), outputFormat, outputPath)
 	}
 	var client *genai.Client
-	if len(enriched) > 0 {
+	if len(remaining) > 0 {
 		client, err = genai.NewClient(ctx, &genai.ClientConfig{
 			APIKey:  apiKey,
 			Backend: genai.BackendGeminiAPI,
@@ -195,7 +225,7 @@ func Run(ctx context.Context, apiKey, model, namespace, k8sVersionOverride, addo
 		}
 		fmt.Fprintf(os.Stderr, "Analyzing with %s...\n", model)
 	}
-	return analyzeCompatibility(ctx, client, model, k8sVersion, enriched, storedResults, outputFormat, outputPath)
+	return analyzeCompatibility(ctx, client, model, k8sVersion, remaining, storedResults, outputFormat, outputPath)
 }
 
 // resolveFromStoredData produces a deterministic compatibility verdict from
@@ -706,6 +736,75 @@ func resolveLocalOnly(addons []addonWithInfo, k8sVersion string) []output.AddonC
 		})
 	}
 	return results
+}
+
+// tryExtractMatrix attempts deterministic table extraction from the addon's raw content.
+// Returns nil if no valid matrix could be extracted.
+func tryExtractMatrix(info addonWithInfo) map[string][]string {
+	var matrix map[string][]string
+	var err error
+
+	if info.IsRawContent {
+		// GitHub raw content is Markdown
+		matrix, err = extract.ExtractMarkdownMatrix(info.RawContent)
+	} else {
+		// Non-GitHub content is HTML
+		matrix, err = extract.ExtractHTMLMatrix(info.RawContent)
+	}
+
+	if err != nil {
+		return nil
+	}
+	return matrix
+}
+
+// resolveFromExtractedMatrix resolves compatibility from a deterministically extracted matrix.
+// Returns nil if the matrix doesn't contain enough data for a verdict.
+func resolveFromExtractedMatrix(info addonWithInfo, matrix map[string][]string, k8sMajorMinor string) *output.AddonCompatibility {
+	result := &output.AddonCompatibility{
+		Name:             info.Name,
+		Namespace:        info.Namespace,
+		InstalledVersion: info.Version,
+		DataSource:       output.DataSourceExtracted,
+	}
+
+	installedNorm := strings.TrimPrefix(info.Version, "v")
+	matchedKey, matchedK8sVersions, matched := findDirectMatrixCompatibilityMatch(matrix, installedNorm)
+
+	if !matched {
+		// Try threshold matching for extracted matrices too
+		thresholdKey, _, thresholdFound := findThresholdCompatibilityMatch(matrix, installedNorm, k8sMajorMinor)
+		if thresholdFound {
+			result.Compatible = output.StatusTrue
+			result.Note = fmt.Sprintf(
+				"Addon version %s satisfies threshold %s for K8s %s per extracted table",
+				info.Version, thresholdKey, k8sMajorMinor,
+			)
+			result.LatestCompatibleVersion = findLatestCompatibleVersion(matrix, k8sMajorMinor)
+			result.Note = appendSourceReference(result.Note, info.CompatibilityURL)
+			return result
+		}
+		// Installed version not found in extracted matrix — not enough data for a verdict.
+		return nil
+	}
+
+	for _, v := range matchedK8sVersions {
+		if normalizeK8sVersion(v) == k8sMajorMinor {
+			result.Compatible = output.StatusTrue
+			result.Note = fmt.Sprintf("Addon version %s supports K8s %s per extracted table", matchedKey, k8sMajorMinor)
+			result.Note = appendSourceReference(result.Note, info.CompatibilityURL)
+			return result
+		}
+	}
+
+	result.Compatible = output.StatusFalse
+	latestKey := findLatestCompatibleVersion(matrix, k8sMajorMinor)
+	if latestKey != "" {
+		result.LatestCompatibleVersion = latestKey
+	}
+	result.Note = fmt.Sprintf("Addon version %s does not support K8s %s per extracted table (supports: %s)", matchedKey, k8sMajorMinor, strings.Join(matchedK8sVersions, ", "))
+	result.Note = appendSourceReference(result.Note, info.CompatibilityURL)
+	return result
 }
 
 func isPatchLevelKeyCompatible(matrixKey string, installedVersion string) bool {

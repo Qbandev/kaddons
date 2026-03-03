@@ -76,6 +76,18 @@ func GitHubRawURL(inputURL string) string {
 	}
 }
 
+// FetchedPage holds both the raw and normalized content of a fetched page.
+type FetchedPage struct {
+	// Text is the normalized content (HTML stripped, whitespace cleaned) used by the LLM.
+	Text string
+	// Raw is the original fetched content before normalization.
+	// For GitHub raw URLs this is Markdown; for other URLs this is HTML.
+	Raw string
+	// IsRaw is true when the URL was converted to a raw.githubusercontent.com URL,
+	// meaning the raw content is Markdown rather than HTML.
+	IsRaw bool
+}
+
 // CompatibilityPage fetches a URL and returns its content using a default HTTP client.
 // GitHub URLs are automatically converted to raw.githubusercontent.com to fetch
 // Markdown directly. Non-GitHub URLs go through HTML-strip path.
@@ -92,42 +104,69 @@ func CompatibilityPage(ctx context.Context, pageURL string) (string, error) {
 	return CompatibilityPageWithClient(ctx, client, pageURL)
 }
 
+// CompatibilityPageFull fetches a URL and returns both raw and normalized content.
+func CompatibilityPageFull(ctx context.Context, pageURL string) (FetchedPage, error) {
+	client := &http.Client{
+		Timeout: 15 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return fmt.Errorf("too many redirects")
+			}
+			return nil
+		},
+	}
+	return fetchPage(ctx, client, pageURL)
+}
+
 // CompatibilityPageWithClient is like CompatibilityPage but uses the provided HTTP client,
 // allowing callers to share a client with custom redirect policies or transport settings.
 func CompatibilityPageWithClient(ctx context.Context, client *http.Client, pageURL string) (string, error) {
-	if err := ValidatePublicHTTPSURL(pageURL); err != nil {
+	page, err := fetchPage(ctx, client, pageURL)
+	if err != nil {
 		return "", err
+	}
+	return page.Text, nil
+}
+
+func fetchPage(ctx context.Context, client *http.Client, pageURL string) (FetchedPage, error) {
+	if err := ValidatePublicHTTPSURL(pageURL); err != nil {
+		return FetchedPage{}, err
 	}
 
 	rawURL := GitHubRawURL(pageURL)
 	isRaw := rawURL != pageURL
 	if err := ValidatePublicHTTPSURL(rawURL); err != nil {
-		return "", err
+		return FetchedPage{}, err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, nil)
 	if err != nil {
-		return "", fmt.Errorf("creating request: %w", err)
+		return FetchedPage{}, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8")
 
 	resp, err := doRequestWithRetry(ctx, client, req)
 	if err != nil {
-		return "", fmt.Errorf("HTTP request failed: %w", err)
+		return FetchedPage{}, fmt.Errorf("HTTP request failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 400 {
-		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
+		return FetchedPage{}, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20)) // 2 MB cap
 	if err != nil {
-		return "", fmt.Errorf("reading response body: %w", err)
+		return FetchedPage{}, fmt.Errorf("reading response body: %w", err)
 	}
 
-	text := normalizeFetchedContent(string(body), isRaw)
-	return text, nil
+	rawContent := string(body)
+	text := normalizeFetchedContent(rawContent, isRaw)
+	return FetchedPage{
+		Text:  text,
+		Raw:   rawContent,
+		IsRaw: isRaw,
+	}, nil
 }
 
 // EOLData fetches release lifecycle data from the endoflife.date API.
