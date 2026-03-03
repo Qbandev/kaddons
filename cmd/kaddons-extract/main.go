@@ -382,11 +382,14 @@ func runSync(dbPath string, workerCount int, filters []string) int {
 		},
 	}
 
-	// Fetch pages with worker pool
+	// Fetch pages and extract matrices with worker pool.
+	// Extraction happens inside the worker so the raw page content (up to 2 MB
+	// per URL) is discarded immediately, and each URL is extracted only once
+	// even when multiple addons share the same compatibility page.
 	type pageResult struct {
-		url  string
-		page fetch.FetchedPage
-		err  error
+		url    string
+		matrix map[string][]string // extracted matrix (nil if extraction failed)
+		err    error               // fetch error
 	}
 	pageResults := make(map[string]pageResult, len(uniqueURLs))
 	var (
@@ -405,8 +408,20 @@ func runSync(dbPath string, workerCount int, filters []string) int {
 			defer wg.Done()
 			for pageURL := range workQueue {
 				page, fetchErr := fetch.CompatibilityPageFullWithClient(ctx, client, pageURL)
+				if fetchErr != nil {
+					mu.Lock()
+					pageResults[pageURL] = pageResult{url: pageURL, err: fetchErr}
+					mu.Unlock()
+					continue
+				}
+				var matrix map[string][]string
+				if page.IsRaw {
+					matrix, _ = extract.ExtractMarkdownMatrix(page.Raw)
+				} else {
+					matrix, _ = extract.ExtractHTMLMatrix(page.Raw)
+				}
 				mu.Lock()
-				pageResults[pageURL] = pageResult{url: pageURL, page: page, err: fetchErr}
+				pageResults[pageURL] = pageResult{url: pageURL, matrix: matrix}
 				mu.Unlock()
 			}
 		}()
@@ -432,24 +447,13 @@ func runSync(dbPath string, workerCount int, filters []string) int {
 
 	for _, c := range candidates {
 		r, ok := pageResults[c.url]
-		if !ok || r.err != nil {
-			continue
-		}
-
-		var matrix map[string][]string
-		var extractErr error
-		if r.page.IsRaw {
-			matrix, extractErr = extract.ExtractMarkdownMatrix(r.page.Raw)
-		} else {
-			matrix, extractErr = extract.ExtractHTMLMatrix(r.page.Raw)
-		}
-		if extractErr != nil || len(matrix) == 0 {
+		if !ok || r.err != nil || len(r.matrix) == 0 {
 			continue
 		}
 
 		// Tentatively apply and validate
 		original := addons[c.index].KubernetesCompatibility
-		addons[c.index].KubernetesCompatibility = matrix
+		addons[c.index].KubernetesCompatibility = r.matrix
 
 		problems := validate.ValidateStoredData([]addon.Addon{addons[c.index]})
 		if len(problems) > 0 {
@@ -463,7 +467,7 @@ func runSync(dbPath string, workerCount int, filters []string) int {
 
 		updated = append(updated, syncUpdateRecord{
 			name:       addons[c.index].Name,
-			entryCount: len(matrix),
+			entryCount: len(r.matrix),
 		})
 	}
 
