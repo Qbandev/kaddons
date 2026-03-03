@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/Qbandev/kaddons/compare/v0.4.2...v0.5.0) (2026-03-03)
+
+
+### Features
+
+* deterministic table extraction and fuzzy matching for local-first resolution ([#38](https://github.com/Qbandev/kaddons/issues/38)) ([2da767c](https://github.com/Qbandev/kaddons/commit/2da767c305f9d5b1ad2f60d05c9c659b73168d2a))
+
 ## [0.4.2](https://github.com/Qbandev/kaddons/compare/v0.4.1...v0.4.2) (2026-03-02)
 
 
