@@ -214,6 +214,7 @@ func TestIsRawGitHubHost(t *testing.T) {
 	}{
 		{"raw URL", "https://raw.githubusercontent.com/owner/repo/main/README.md", true},
 		{"raw URL mixed case", "https://Raw.Githubusercontent.Com/owner/repo/main/README.md", true},
+		{"raw URL with port", "https://raw.githubusercontent.com:443/owner/repo/main/README.md", true},
 		{"github.com", "https://github.com/owner/repo", false},
 		{"other host", "https://example.com/page", false},
 		{"invalid URL", "://bad", false},

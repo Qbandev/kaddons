@@ -74,11 +74,6 @@ func main() {
 		os.Exit(2)
 	}
 
-	if *syncMode {
-		exitCode := runSync(*dbPath, *workerCount)
-		os.Exit(exitCode)
-	}
-
 	var filters []string
 	if *filterFlag != "" {
 		for _, f := range strings.Split(*filterFlag, ",") {
@@ -87,6 +82,11 @@ func main() {
 				filters = append(filters, strings.ToLower(f))
 			}
 		}
+	}
+
+	if *syncMode {
+		exitCode := runSync(*dbPath, *workerCount, filters)
+		os.Exit(exitCode)
 	}
 
 	if err := run(*cacheRootPath, *workerCount, filters); err != nil {
@@ -313,7 +313,7 @@ func sha256Hex(value string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func runSync(dbPath string, workerCount int) int {
+func runSync(dbPath string, workerCount int, filters []string) int {
 	dbPath = filepath.Clean(dbPath)
 	if _, err := os.Stat(dbPath); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: database file not found: %s\n", dbPath)
@@ -336,6 +336,19 @@ func runSync(dbPath string, workerCount int) int {
 	for i := range addons {
 		if addons[i].HasStoredCompatibility() || addons[i].CompatibilityMatrixURL == "" {
 			continue
+		}
+		if len(filters) > 0 {
+			nameLower := strings.ToLower(addons[i].Name)
+			matched := false
+			for _, f := range filters {
+				if strings.Contains(nameLower, f) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				continue
+			}
 		}
 		candidates = append(candidates, candidate{index: i, url: addons[i].CompatibilityMatrixURL})
 		urlSet[addons[i].CompatibilityMatrixURL] = true

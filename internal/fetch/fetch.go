@@ -28,7 +28,7 @@ func isRawGitHubHost(rawURL string) bool {
 	if err != nil {
 		return false
 	}
-	return strings.EqualFold(u.Host, "raw.githubusercontent.com")
+	return strings.EqualFold(u.Hostname(), "raw.githubusercontent.com")
 }
 
 // GitHubRawURL converts a GitHub URL to its raw.githubusercontent.com equivalent
