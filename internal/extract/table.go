@@ -44,7 +44,7 @@ func ExtractHTMLMatrix(content string) (map[string][]string, error) {
 func parseMarkdownTables(content string) [][][]string {
 	var tables [][][]string
 	var currentTable [][]string
-	cellCount := 0
+	tableCellCount := 0
 
 	for _, line := range strings.Split(content, "\n") {
 		trimmed := strings.TrimSpace(line)
@@ -52,6 +52,7 @@ func parseMarkdownTables(content string) [][][]string {
 			if len(currentTable) > 0 {
 				tables = append(tables, currentTable)
 				currentTable = nil
+				tableCellCount = 0
 			}
 			continue
 		}
@@ -62,12 +63,14 @@ func parseMarkdownTables(content string) [][][]string {
 		}
 
 		cells := parseMarkdownRow(trimmed)
-		cellCount += len(cells)
-		if cellCount > maxCells {
+		tableCellCount += len(cells)
+		if tableCellCount > maxCells {
 			if len(currentTable) > 0 {
 				tables = append(tables, currentTable)
+				currentTable = nil
+				tableCellCount = 0
 			}
-			return tables
+			continue
 		}
 		currentTable = append(currentTable, cells)
 	}
@@ -79,8 +82,14 @@ func parseMarkdownTables(content string) [][][]string {
 }
 
 // isMarkdownTableRow checks if a line looks like a Markdown table row.
+// Requires at least two pipes and the line to start or end with a pipe,
+// which avoids false positives from prose or code containing "|".
 func isMarkdownTableRow(line string) bool {
-	return strings.Contains(line, "|")
+	trimmed := strings.TrimSpace(line)
+	if strings.Count(trimmed, "|") < 2 {
+		return false
+	}
+	return strings.HasPrefix(trimmed, "|") || strings.HasSuffix(trimmed, "|")
 }
 
 // isMarkdownSeparatorRow detects separator rows like "| --- | --- |" or "|:---:|".
@@ -134,7 +143,6 @@ func parseHTMLTables(content string) [][][]string {
 	}
 
 	var tables [][][]string
-	cellCount := 0
 
 	for _, tableMatch := range tableMatches {
 		tableContent := tableMatch[1]
@@ -144,6 +152,7 @@ func parseHTMLTables(content string) [][][]string {
 		}
 
 		var rows [][]string
+		tableCellCount := 0
 		for _, rowMatch := range rowMatches {
 			rowContent := rowMatch[1]
 			cellMatches := htmlCellRe.FindAllStringSubmatch(rowContent, -1)
@@ -160,12 +169,9 @@ func parseHTMLTables(content string) [][][]string {
 				cells = append(cells, text)
 			}
 
-			cellCount += len(cells)
-			if cellCount > maxCells {
-				if len(rows) > 0 {
-					tables = append(tables, rows)
-				}
-				return tables
+			tableCellCount += len(cells)
+			if tableCellCount > maxCells {
+				break
 			}
 			rows = append(rows, cells)
 		}
@@ -274,8 +280,9 @@ func buildMatrixFromVersionHeaders(rows [][]string, headers []string, addonCol i
 		}
 
 		var k8sVersions []string
-		for colIdx := range k8sCols {
-			if colIdx >= len(row) {
+		// Iterate headers left-to-right for deterministic output order.
+		for colIdx, hdr := range headers {
+			if !k8sCols[colIdx] || colIdx >= len(row) {
 				continue
 			}
 			cell := strings.TrimSpace(row[colIdx])
@@ -284,7 +291,7 @@ func buildMatrixFromVersionHeaders(rows [][]string, headers []string, addonCol i
 			}
 			// The cell is non-empty — this addon version supports this K8s version.
 			// Common patterns: checkmark, "yes", "supported", version number, or any non-empty value.
-			headerVersion := normalizeK8sVersionFromHeader(headers[colIdx])
+			headerVersion := normalizeK8sVersionFromHeader(hdr)
 			if headerVersion != "" {
 				k8sVersions = append(k8sVersions, headerVersion)
 			}

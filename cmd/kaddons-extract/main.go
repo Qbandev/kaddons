@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -466,37 +467,37 @@ func runSync(dbPath string, workerCount int) int {
 	return 1
 }
 
-func printSyncReport(w *os.File, candidateCount, fetchSuccess, fetchFail int, updated []syncUpdateRecord, skipped []syncSkipRecord, fetchFailures []string) {
-	fmt.Fprintln(w, "DB Sync Summary")
-	fmt.Fprintf(w, "  Candidates:  %d addons without stored data\n", candidateCount)
-	fmt.Fprintf(w, "  Fetched:     %d pages (%d failed)\n", fetchSuccess, fetchFail)
-	fmt.Fprintf(w, "  Extracted:   %d new compatibility matrices\n", len(updated)+len(skipped))
-	fmt.Fprintf(w, "  Validated:   %d passed, %d skipped (validation errors)\n", len(updated), len(skipped))
+func printSyncReport(w io.Writer, candidateCount, fetchSuccess, fetchFail int, updated []syncUpdateRecord, skipped []syncSkipRecord, fetchFailures []string) {
+	_, _ = fmt.Fprintln(w, "DB Sync Summary")
+	_, _ = fmt.Fprintf(w, "  Candidates:  %d addons without stored data\n", candidateCount)
+	_, _ = fmt.Fprintf(w, "  Fetched:     %d pages (%d failed)\n", fetchSuccess, fetchFail)
+	_, _ = fmt.Fprintf(w, "  Extracted:   %d new compatibility matrices\n", len(updated)+len(skipped))
+	_, _ = fmt.Fprintf(w, "  Validated:   %d passed, %d skipped (validation errors)\n", len(updated), len(skipped))
 	if len(updated) > 0 {
-		fmt.Fprintf(w, "  Updated:     %d addons written to %s\n", len(updated), "k8s_universal_addons.json")
+		_, _ = fmt.Fprintf(w, "  Updated:     %d addons written to %s\n", len(updated), "k8s_universal_addons.json")
 	}
 
 	if len(updated) > 0 {
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, "Updated addons:")
+		_, _ = fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w, "Updated addons:")
 		for _, u := range updated {
-			fmt.Fprintf(w, "  - %s: %d version entries\n", u.name, u.entryCount)
+			_, _ = fmt.Fprintf(w, "  - %s: %d version entries\n", u.name, u.entryCount)
 		}
 	}
 
 	if len(skipped) > 0 {
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, "Skipped (validation errors):")
+		_, _ = fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w, "Skipped (validation errors):")
 		for _, s := range skipped {
-			fmt.Fprintf(w, "  - %s: %s\n", s.name, s.reason)
+			_, _ = fmt.Fprintf(w, "  - %s: %s\n", s.name, s.reason)
 		}
 	}
 
 	if len(fetchFailures) > 0 {
-		fmt.Fprintln(w)
-		fmt.Fprintln(w, "Fetch failures:")
+		_, _ = fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w, "Fetch failures:")
 		for _, f := range fetchFailures {
-			fmt.Fprintln(w, f)
+			_, _ = fmt.Fprintln(w, f)
 		}
 	}
 }

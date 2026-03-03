@@ -1,6 +1,7 @@
 package extract
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -381,5 +382,89 @@ func TestNormalizeVersionCell(t *testing.T) {
 				t.Errorf("normalizeVersionCell(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestIsMarkdownTableRow_RejectsProse(t *testing.T) {
+	tests := []struct {
+		line string
+		want bool
+	}{
+		{"| A | B |", true},
+		{"| A | B | C |", true},
+		{"A | B | C", false},                   // no leading/trailing pipe
+		{"this has a | pipe in prose", false},   // single pipe, no table structure
+		{"code: x || y", false},                 // logical OR in code, no table structure
+		{"| single pipe only", false},           // only one pipe
+		{"", false},                             // empty line
+	}
+	for _, tt := range tests {
+		t.Run(tt.line, func(t *testing.T) {
+			if got := isMarkdownTableRow(tt.line); got != tt.want {
+				t.Errorf("isMarkdownTableRow(%q) = %v, want %v", tt.line, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseMarkdownTables_CellCapResetsPerTable(t *testing.T) {
+	// Build a large table that would exhaust a global cell count,
+	// followed by a small compatibility table.
+	var large strings.Builder
+	large.WriteString("| Col1 | Col2 | Col3 | Col4 | Col5 |\n")
+	large.WriteString("| --- | --- | --- | --- | --- |\n")
+	for i := 0; i < 250; i++ {
+		fmt.Fprintf(&large, "| a%d | b%d | c%d | d%d | e%d |\n", i, i, i, i, i)
+	}
+	// 250 rows * 5 cols = 1250 cells in the first table (exceeds maxCells=1000 if global)
+
+	content := large.String() + "\nSome text between tables\n\n" +
+		"| Version | 1.28 | 1.29 |\n| --- | --- | --- |\n| v1.0.0 | Yes | Yes |\n"
+
+	// With per-table reset, the second table should still be parsed.
+	tables := parseMarkdownTables(content)
+	if len(tables) < 2 {
+		t.Fatalf("expected at least 2 tables (per-table cell cap), got %d", len(tables))
+	}
+}
+
+func TestBuildMatrixFromVersionHeaders_DeterministicOrder(t *testing.T) {
+	// Headers have K8s versions in a specific order.
+	headers := []string{"Addon Version", "1.30", "1.28", "1.29"}
+	rows := [][]string{
+		headers,
+		{"v1.0.0", "Yes", "Yes", "Yes"},
+	}
+	k8sCols := map[int]bool{1: true, 2: true, 3: true}
+
+	// Run multiple times to catch nondeterminism.
+	for i := 0; i < 20; i++ {
+		matrix := buildMatrixFromVersionHeaders(rows, headers, 0, k8sCols)
+		got := matrix["v1.0.0"]
+		if len(got) != 3 {
+			t.Fatalf("iteration %d: expected 3 versions, got %d: %v", i, len(got), got)
+		}
+		// Versions must follow header order: 1.30, 1.28, 1.29
+		if got[0] != "1.30" || got[1] != "1.28" || got[2] != "1.29" {
+			t.Fatalf("iteration %d: expected [1.30 1.28 1.29], got %v", i, got)
+		}
+	}
+}
+
+func TestParseHTMLTables_CellCapResetsPerTable(t *testing.T) {
+	// Build a large HTML table that would exhaust a global cell count.
+	var large strings.Builder
+	large.WriteString("<table><tr><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th></tr>")
+	for i := 0; i < 250; i++ {
+		fmt.Fprintf(&large, "<tr><td>%d</td><td>%d</td><td>%d</td><td>%d</td><td>%d</td></tr>", i, i, i, i, i)
+	}
+	large.WriteString("</table>")
+
+	small := `<table><tr><th>Version</th><th>1.28</th></tr><tr><td>v1.0.0</td><td>Yes</td></tr></table>`
+	content := large.String() + small
+
+	tables := parseHTMLTables(content)
+	if len(tables) < 2 {
+		t.Fatalf("expected at least 2 tables (per-table cell cap), got %d", len(tables))
 	}
 }

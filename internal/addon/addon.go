@@ -64,7 +64,7 @@ func LoadAddons() ([]Addon, error) {
 // LoadAddonsFromDisk reads and parses the addon database from a file on disk,
 // as opposed to LoadAddons which reads from the embedded go:embed data.
 func LoadAddonsFromDisk(path string) ([]Addon, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- path comes from CLI flag, sanitized by filepath.Clean in caller
 	if err != nil {
 		return nil, fmt.Errorf("reading addon database file: %w", err)
 	}
@@ -93,16 +93,16 @@ func SaveAddonsToDisk(path string, addons []Addon) error {
 	tmpPath := tmp.Name()
 
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath) // #nosec G104 -- best-effort cleanup
 		return fmt.Errorf("writing temp file: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath) // #nosec G104 -- best-effort cleanup
 		return fmt.Errorf("closing temp file: %w", err)
 	}
 	if err := os.Rename(tmpPath, path); err != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath) // #nosec G104 -- best-effort cleanup
 		return fmt.Errorf("renaming temp file: %w", err)
 	}
 	return nil

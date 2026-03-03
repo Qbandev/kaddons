@@ -141,6 +141,11 @@ func fetchPage(ctx context.Context, client *http.Client, pageURL string) (Fetche
 
 	rawURL := GitHubRawURL(pageURL)
 	isRaw := rawURL != pageURL
+	if !isRaw {
+		if u, parseErr := url.Parse(rawURL); parseErr == nil && strings.EqualFold(u.Host, "raw.githubusercontent.com") {
+			isRaw = true
+		}
+	}
 	if err := ValidatePublicHTTPSURL(rawURL); err != nil {
 		return FetchedPage{}, err
 	}

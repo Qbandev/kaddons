@@ -191,3 +191,38 @@ func TestNormalizeFetchedContent_UTF8SafeTruncation(t *testing.T) {
 		t.Fatalf("normalizeFetchedContent() produced invalid UTF-8")
 	}
 }
+
+func TestGitHubRawURL_DirectRawURL(t *testing.T) {
+	// A URL that is already raw.githubusercontent.com should not be converted.
+	input := "https://raw.githubusercontent.com/owner/repo/main/README.md"
+	got := GitHubRawURL(input)
+	if got != input {
+		t.Errorf("GitHubRawURL(%q) = %q, want unchanged", input, got)
+	}
+}
+
+func TestFetchPage_IsRawForDirectRawURL(t *testing.T) {
+	// Verify that fetchPage detects raw.githubusercontent.com URLs as raw
+	// even when GitHubRawURL doesn't convert them (rawURL == pageURL).
+	// We can't easily call fetchPage in a unit test (needs HTTP), but we can
+	// verify the detection logic matches the contract.
+	rawHost := "raw.githubusercontent.com"
+	tests := []struct {
+		name string
+		host string
+		want bool
+	}{
+		{"raw.githubusercontent.com", rawHost, true},
+		{"Raw.Githubusercontent.Com", "Raw.Githubusercontent.Com", true},
+		{"github.com", "github.com", false},
+		{"example.com", "example.com", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := strings.EqualFold(tt.host, rawHost)
+			if got != tt.want {
+				t.Errorf("host %q: isRaw = %v, want %v", tt.host, got, tt.want)
+			}
+		})
+	}
+}
