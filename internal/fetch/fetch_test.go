@@ -82,6 +82,11 @@ func TestGitHubRawURL(t *testing.T) {
 			input: "https://github.com/stakater/Reloader/",
 			want:  "https://raw.githubusercontent.com/stakater/Reloader/HEAD/README.md",
 		},
+		{
+			name:  "mixed case github.com host",
+			input: "https://GitHub.com/owner/repo",
+			want:  "https://raw.githubusercontent.com/owner/repo/HEAD/README.md",
+		},
 	}
 
 	for _, tt := range tests {

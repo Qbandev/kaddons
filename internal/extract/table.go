@@ -393,8 +393,13 @@ func isK8sVersion(s string) bool {
 }
 
 // isAddonVersion validates that a string looks like an addon version.
+// Rejects values that match K8s version format (1.x) to prevent misclassification
+// in the version-header strategy where K8s versions could appear in data rows.
 func isAddonVersion(s string) bool {
 	if s == "" {
+		return false
+	}
+	if isK8sVersion(s) {
 		return false
 	}
 	return addonVersionPattern.MatchString(s)

@@ -269,6 +269,10 @@ func TestIsAddonVersion(t *testing.T) {
 		{"", false},
 		{"latest", false},
 		{"HEAD", false},
+		{"1.28", false},  // K8s version format (1.x) rejected
+		{"1.30", false},  // K8s version format (1.x) rejected
+		{"v1.29", false}, // K8s version with v prefix rejected
+		{"2.0", true},    // major != 1, not a K8s version
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {

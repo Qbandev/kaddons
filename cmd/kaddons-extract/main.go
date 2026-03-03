@@ -55,12 +55,15 @@ func main() {
 	syncMode := flag.Bool("sync", false, "Extract matrices and write back to addon database JSON")
 	dbPath := flag.String("db-path", "internal/addon/k8s_universal_addons.json", "Path to addon database JSON file")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: kaddons-extract [--cache-root PATH] [--workers N] [--filter NAMES]\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: kaddons-extract [--cache-root PATH] [--workers N] [--filter NAMES]\n")
+		fmt.Fprintf(os.Stderr, "       kaddons-extract --sync [--db-path PATH] [--workers N] [--filter NAMES]\n\n")
 		fmt.Fprintf(os.Stderr, "Fetches compatibility pages for addon matrix URLs,\n")
 		fmt.Fprintf(os.Stderr, "classifies matrix quality, and writes a manifest for extraction subagents.\n\n")
+		fmt.Fprintf(os.Stderr, "With --sync, extracts matrices and writes them back to the addon database.\n\n")
 		fmt.Fprintf(os.Stderr, "Examples:\n")
 		fmt.Fprintf(os.Stderr, "  kaddons-extract --filter cert-manager\n")
-		fmt.Fprintf(os.Stderr, "  kaddons-extract --filter \"cert-manager,karpenter,istio\"\n\n")
+		fmt.Fprintf(os.Stderr, "  kaddons-extract --sync\n")
+		fmt.Fprintf(os.Stderr, "  kaddons-extract --sync --db-path path/to/addons.json\n\n")
 		fmt.Fprintf(os.Stderr, "Flags:\n")
 		flag.PrintDefaults()
 	}

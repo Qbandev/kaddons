@@ -166,11 +166,11 @@ func levenshteinDistance(a, b string) int {
 		return len(ra)
 	}
 	prev := make([]int, len(rb)+1)
+	curr := make([]int, len(rb)+1)
 	for j := range prev {
 		prev[j] = j
 	}
 	for i := 1; i <= len(ra); i++ {
-		curr := make([]int, len(rb)+1)
 		curr[0] = i
 		for j := 1; j <= len(rb); j++ {
 			cost := 1
@@ -188,7 +188,7 @@ func levenshteinDistance(a, b string) int {
 				curr[j] = sub
 			}
 		}
-		prev = curr
+		prev, curr = curr, prev
 	}
 	return prev[len(rb)]
 }
@@ -398,8 +398,12 @@ func (matcher *Matcher) Match(name string) []Addon {
 			if dist > 2 {
 				continue
 			}
-			// Distance must be less than 25% of the name length
-			if dist*4 >= len(normalized) {
+			// Distance must be less than 25% of the shorter name length.
+			baseLen := len(normalized)
+			if l := len(entry.lowerName); l < baseLen {
+				baseLen = l
+			}
+			if dist*4 >= baseLen {
 				continue
 			}
 			if dist < bestDist {

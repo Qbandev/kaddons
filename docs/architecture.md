@@ -71,7 +71,7 @@ Each detected workload is matched against the embedded addon database (668 addon
 | 4 | Forward prefix (DB starts with detected) | `cert` → `cert-manager`, `cert-manager-csi-driver` |
 | 5 | Reverse prefix (detected starts with DB) | `prometheus-operator` → `Prometheus` |
 | 6 | Word-subset (all words of core appear in DB) | `node-exporter` → `Prometheus Node Exporter` |
-| 7 | Levenshtein fuzzy match (distance ≤ 2, < 25% of name length) | `cert-manger` → `cert-manager` |
+| 7 | Levenshtein fuzzy match (distance ≤ 2, < 25% of shorter name) | `cert-manger` → `cert-manager` |
 
 Names shorter than 4 characters skip fuzzy matching (passes 4-7) to avoid false positives. Pass 7 additionally requires both the detected and DB names to be at least 6 characters.
 

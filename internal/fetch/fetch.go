@@ -36,7 +36,7 @@ func isRawGitHubHost(rawURL string) bool {
 // Non-GitHub URLs, wiki URLs, release URLs, and org-only URLs are returned unchanged.
 func GitHubRawURL(inputURL string) string {
 	parsed, err := url.Parse(inputURL)
-	if err != nil || parsed.Host != "github.com" {
+	if err != nil || !strings.EqualFold(parsed.Hostname(), "github.com") {
 		return inputURL
 	}
 
@@ -92,7 +92,8 @@ type FetchedPage struct {
 	// Raw is the original fetched content before normalization.
 	// For GitHub raw URLs this is Markdown; for other URLs this is HTML.
 	Raw string
-	// IsRaw is true when the URL was converted to a raw.githubusercontent.com URL,
+	// IsRaw is true when the fetched content is from raw.githubusercontent.com
+	// (either by conversion or because the URL was already a raw GitHub URL),
 	// meaning the raw content is Markdown rather than HTML.
 	IsRaw bool
 }
