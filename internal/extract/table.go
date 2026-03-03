@@ -45,15 +45,21 @@ func parseMarkdownTables(content string) [][][]string {
 	var tables [][][]string
 	var currentTable [][]string
 	tableCellCount := 0
+	skipOversize := false
 
 	for _, line := range strings.Split(content, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if !isMarkdownTableRow(trimmed) {
 			if len(currentTable) > 0 {
 				tables = append(tables, currentTable)
-				currentTable = nil
-				tableCellCount = 0
 			}
+			currentTable = nil
+			tableCellCount = 0
+			skipOversize = false
+			continue
+		}
+
+		if skipOversize {
 			continue
 		}
 
@@ -65,11 +71,9 @@ func parseMarkdownTables(content string) [][][]string {
 		cells := parseMarkdownRow(trimmed)
 		tableCellCount += len(cells)
 		if tableCellCount > maxCells {
-			if len(currentTable) > 0 {
-				tables = append(tables, currentTable)
-				currentTable = nil
-				tableCellCount = 0
-			}
+			// Discard the entire over-limit table to avoid truncated matrices.
+			currentTable = nil
+			skipOversize = true
 			continue
 		}
 		currentTable = append(currentTable, cells)
@@ -171,6 +175,8 @@ func parseHTMLTables(content string) [][][]string {
 
 			tableCellCount += len(cells)
 			if tableCellCount > maxCells {
+				// Discard the entire over-limit table to avoid truncated matrices.
+				rows = nil
 				break
 			}
 			rows = append(rows, cells)

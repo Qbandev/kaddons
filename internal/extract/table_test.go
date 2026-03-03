@@ -407,24 +407,27 @@ func TestIsMarkdownTableRow_RejectsProse(t *testing.T) {
 	}
 }
 
-func TestParseMarkdownTables_CellCapResetsPerTable(t *testing.T) {
-	// Build a large table that would exhaust a global cell count,
-	// followed by a small compatibility table.
+func TestParseMarkdownTables_CellCapDiscardsOversizeTable(t *testing.T) {
+	// Build a large table that exceeds maxCells, followed by a small table.
+	// The large table should be discarded; the small table should still be parsed.
 	var large strings.Builder
 	large.WriteString("| Col1 | Col2 | Col3 | Col4 | Col5 |\n")
 	large.WriteString("| --- | --- | --- | --- | --- |\n")
 	for i := 0; i < 250; i++ {
 		fmt.Fprintf(&large, "| a%d | b%d | c%d | d%d | e%d |\n", i, i, i, i, i)
 	}
-	// 250 rows * 5 cols = 1250 cells in the first table (exceeds maxCells=1000 if global)
+	// 250 rows * 5 cols = 1250 cells (exceeds maxCells=1000)
 
 	content := large.String() + "\nSome text between tables\n\n" +
 		"| Version | 1.28 | 1.29 |\n| --- | --- | --- |\n| v1.0.0 | Yes | Yes |\n"
 
-	// With per-table reset, the second table should still be parsed.
 	tables := parseMarkdownTables(content)
-	if len(tables) < 2 {
-		t.Fatalf("expected at least 2 tables (per-table cell cap), got %d", len(tables))
+	if len(tables) != 1 {
+		t.Fatalf("expected 1 table (over-limit discarded), got %d", len(tables))
+	}
+	// The surviving table should be the small compatibility table.
+	if len(tables[0]) != 2 { // header + 1 data row
+		t.Fatalf("expected 2 rows in surviving table, got %d", len(tables[0]))
 	}
 }
 
@@ -451,8 +454,9 @@ func TestBuildMatrixFromVersionHeaders_DeterministicOrder(t *testing.T) {
 	}
 }
 
-func TestParseHTMLTables_CellCapResetsPerTable(t *testing.T) {
-	// Build a large HTML table that would exhaust a global cell count.
+func TestParseHTMLTables_CellCapDiscardsOversizeTable(t *testing.T) {
+	// Build a large HTML table that exceeds maxCells, followed by a small table.
+	// The large table should be discarded; the small table should still be parsed.
 	var large strings.Builder
 	large.WriteString("<table><tr><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th></tr>")
 	for i := 0; i < 250; i++ {
@@ -464,7 +468,11 @@ func TestParseHTMLTables_CellCapResetsPerTable(t *testing.T) {
 	content := large.String() + small
 
 	tables := parseHTMLTables(content)
-	if len(tables) < 2 {
-		t.Fatalf("expected at least 2 tables (per-table cell cap), got %d", len(tables))
+	if len(tables) != 1 {
+		t.Fatalf("expected 1 table (over-limit discarded), got %d", len(tables))
+	}
+	// The surviving table should be the small one with 2 rows.
+	if len(tables[0]) != 2 {
+		t.Fatalf("expected 2 rows in surviving table, got %d", len(tables[0]))
 	}
 }

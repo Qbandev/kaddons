@@ -22,6 +22,15 @@ var cellOpenTagRe = regexp.MustCompile(`(?i)<(?:td|th)[^>]*>`)
 var horizontalWhitespaceRe = regexp.MustCompile(`[ \t\r\f\v]+`)
 var blankLineRe = regexp.MustCompile(`\n{2,}`)
 
+// isRawGitHubHost returns true if the URL points to raw.githubusercontent.com.
+func isRawGitHubHost(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(u.Host, "raw.githubusercontent.com")
+}
+
 // GitHubRawURL converts a GitHub URL to its raw.githubusercontent.com equivalent
 // so that Markdown content is fetched directly instead of rendered HTML.
 // Non-GitHub URLs, wiki URLs, release URLs, and org-only URLs are returned unchanged.
@@ -142,9 +151,7 @@ func fetchPage(ctx context.Context, client *http.Client, pageURL string) (Fetche
 	rawURL := GitHubRawURL(pageURL)
 	isRaw := rawURL != pageURL
 	if !isRaw {
-		if u, parseErr := url.Parse(rawURL); parseErr == nil && strings.EqualFold(u.Host, "raw.githubusercontent.com") {
-			isRaw = true
-		}
+		isRaw = isRawGitHubHost(rawURL)
 	}
 	if err := ValidatePublicHTTPSURL(rawURL); err != nil {
 		return FetchedPage{}, err
