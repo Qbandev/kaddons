@@ -54,6 +54,17 @@ Runs every Monday at 08:00 UTC (also manually triggerable).
 
 This catches URL rot in the addon database — projects move, rename repositories, or restructure documentation.
 
+### Weekly DB sync (`db-sync.yml`)
+
+Runs every Wednesday at 10:00 UTC (also manually triggerable).
+
+1. Runs `go run ./cmd/kaddons-extract --sync` to extract compatibility matrices from addon documentation pages
+2. If new matrices are extracted (exit 1): runs tests and stored-data validation, then creates or updates a PR on `chore/db-sync` branch labeled `db-sync`
+3. If no new data (exit 0): closes any open `chore/db-sync` PR
+4. If runtime error (exit 2+): fails the workflow
+
+This automatically enriches the addon database with deterministic table extraction — no LLM needed. The PR contains a summary report listing updated addons, extraction counts, and any skipped entries.
+
 ### Release (`release.yml`)
 
 Triggered on each push to `main`. Single workflow with three chained jobs:

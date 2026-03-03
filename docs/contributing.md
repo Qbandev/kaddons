@@ -27,22 +27,27 @@ go test -v -race ./...
 ```
 cmd/kaddons/
   main.go                             CLI entrypoint (Cobra), flags
+cmd/kaddons-extract/
+  main.go                             Matrix extraction cache/manifest generator (dev workflow)
 cmd/kaddons-validate/
   main.go                             DB validation tool (dev/CI only, not distributed)
 
 internal/
   addon/
-    addon.go                          Embedded addon DB, 6-pass matching, EOL slug mapping
-    addon_test.go                     Matching, normalization, EOL resolution tests
+    addon.go                          Embedded addon DB, 7-pass matching, EOL slug mapping
+    addon_test.go                     Matching, normalization, Levenshtein, EOL resolution tests
     k8s_universal_addons.json         Addon database (668 entries, embedded via go:embed)
   agent/
-    agent.go                          Plan-and-Execute pipeline (discovery → enrichment → analysis)
+    agent.go                          Plan-and-Execute pipeline (discovery → enrichment → extraction → analysis)
     evidence_test.go                  Stored data resolution, local-only fallback, evidence pruning tests
   cluster/
     cluster.go                        kubectl interaction, version detection, workload discovery
     cluster_test.go                   Chart version, image tag extraction tests
+  extract/
+    table.go                          Deterministic Markdown/HTML table extraction for K8s compatibility matrices
+    table_test.go                     Table extraction tests (version headers, labeled columns, edge cases)
   fetch/
-    fetch.go                          HTTP fetching, GitHub raw URL conversion, EOL data
+    fetch.go                          HTTP fetching, GitHub raw URL conversion, EOL data, FetchedPage
     fetch_test.go                     GitHub URL conversion tests
     url_policy.go                     URL domain allowlist policy
     url_policy_test.go                URL policy validation tests
@@ -64,7 +69,8 @@ Makefile                              Build, install, clean targets
 
 Tests are table-driven and do not require cluster access or API keys. They cover:
 
-- **Addon matching** (`internal/addon/addon_test.go`) — exact match, normalization, role suffix stripping, word-subset matching, alias resolution, EOL slug lookup, version cycle matching
+- **Addon matching** (`internal/addon/addon_test.go`) — exact match, normalization, role suffix stripping, word-subset matching, Levenshtein fuzzy matching, alias resolution, EOL slug lookup, version cycle matching
+- **Table extraction** (`internal/extract/table_test.go`) — Markdown and HTML table parsing, version-header and labeled-column strategies, cell cap, malformed input, edge cases
 - **Agent logic** (`internal/agent/evidence_test.go`) — stored data resolution, local-only fallback, evidence pruning, matrix key matching, version comparison, threshold compatibility
 - **URL conversion** (`internal/fetch/fetch_test.go`) — GitHub→raw conversion for all URL patterns (repo root, blob, tree, wiki, releases, non-GitHub)
 - **URL policy** (`internal/fetch/url_policy_test.go`) — domain allowlist policy validation

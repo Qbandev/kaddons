@@ -10,8 +10,8 @@ kaddons uses a three-phase **Plan-and-Execute** pipeline. Phases 1 and 2 are ful
 
 ```
 Phase 1: Discovery        kubectl → detect K8s version + installed workloads
-Phase 2: Enrichment       Match against 668-addon DB, resolve stored matrix data first
-Phase 3: Analysis         Gemini calls only for addons unresolved by stored data (optional; local-only fallback when no API key)
+Phase 2: Enrichment       Match against 668-addon DB, resolve stored matrix data, then try deterministic table extraction
+Phase 3: Analysis         Gemini calls only for addons unresolved by stored data and extraction (optional; local-only fallback when no API key)
 ```
 
 See [docs/architecture.md](docs/architecture.md) for the full data flow.
@@ -115,6 +115,7 @@ The `compatible` field is a tri-state string:
 
 The `data_source` field shows where the verdict came from:
 - `"stored"` — deterministic resolver from local stored db
+- `"extracted"` — deterministic table extraction from fetched compatibility pages (no LLM)
 - `"llm"` — runtime Gemini analysis of local stored db and fetched compatibility evidence
 - `"local"` — no LLM configured; result based on available local data only
 
