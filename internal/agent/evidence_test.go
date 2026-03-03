@@ -747,3 +747,257 @@ func TestResolveFromStoredData_PatchLineCompatibility(t *testing.T) {
 		t.Fatalf("expected StatusTrue for compatible patch line, got %q (note: %s)", result.Compatible, result.Note)
 	}
 }
+
+// --- Extracted matrix tests ---
+
+func TestTryExtractMatrix_MarkdownWithValidTable(t *testing.T) {
+	info := addonWithInfo{
+		DetectedAddon: cluster.DetectedAddon{
+			Name:      "cert-manager",
+			Namespace: "cert-manager",
+			Version:   "v1.15.0",
+		},
+		RawContent: `# Compatibility
+
+| Addon Version | 1.28 | 1.29 | 1.30 |
+| --- | --- | --- | --- |
+| v1.15.0 | Yes | Yes | Yes |
+| v1.14.0 | Yes | Yes | |
+`,
+		IsRawContent: true,
+	}
+
+	matrix := tryExtractMatrix(info)
+	if matrix == nil {
+		t.Fatal("expected non-nil matrix from Markdown content")
+	}
+	got, ok := matrix["v1.15.0"]
+	if !ok {
+		t.Fatal("expected key v1.15.0 in matrix")
+	}
+	if len(got) != 3 {
+		t.Errorf("v1.15.0 supports %d versions, want 3: %v", len(got), got)
+	}
+}
+
+func TestTryExtractMatrix_HTMLWithValidTable(t *testing.T) {
+	info := addonWithInfo{
+		DetectedAddon: cluster.DetectedAddon{
+			Name:      "ingress-nginx",
+			Namespace: "ingress-nginx",
+			Version:   "v1.10.0",
+		},
+		RawContent: `<html><body>
+<table>
+<tr><th>Version</th><th>1.28</th><th>1.29</th><th>1.30</th></tr>
+<tr><td>v1.10.0</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>v1.9.0</td><td>Yes</td><td>Yes</td><td></td></tr>
+</table>
+</body></html>`,
+		IsRawContent: false,
+	}
+
+	matrix := tryExtractMatrix(info)
+	if matrix == nil {
+		t.Fatal("expected non-nil matrix from HTML content")
+	}
+	got, ok := matrix["v1.10.0"]
+	if !ok {
+		t.Fatal("expected key v1.10.0 in matrix")
+	}
+	if len(got) != 3 {
+		t.Errorf("v1.10.0 supports %d versions, want 3: %v", len(got), got)
+	}
+}
+
+func TestTryExtractMatrix_NoTable(t *testing.T) {
+	info := addonWithInfo{
+		DetectedAddon: cluster.DetectedAddon{
+			Name:      "some-addon",
+			Namespace: "default",
+			Version:   "v1.0.0",
+		},
+		RawContent:   "This is plain text documentation with no table at all.",
+		IsRawContent: true,
+	}
+
+	matrix := tryExtractMatrix(info)
+	if matrix != nil {
+		t.Errorf("expected nil matrix for content without tables, got %v", matrix)
+	}
+}
+
+func TestTryExtractMatrix_EmptyContent(t *testing.T) {
+	info := addonWithInfo{
+		DetectedAddon: cluster.DetectedAddon{
+			Name:      "some-addon",
+			Namespace: "default",
+			Version:   "v1.0.0",
+		},
+		RawContent:   "",
+		IsRawContent: true,
+	}
+
+	matrix := tryExtractMatrix(info)
+	if matrix != nil {
+		t.Errorf("expected nil matrix for empty content, got %v", matrix)
+	}
+}
+
+func TestResolveFromExtractedMatrix_DirectMatch_Compatible(t *testing.T) {
+	info := addonWithInfo{
+		DetectedAddon: cluster.DetectedAddon{
+			Name:      "cert-manager",
+			Namespace: "cert-manager",
+			Version:   "v1.15.0",
+		},
+		DBMatch:          &addon.Addon{Name: "cert-manager"},
+		CompatibilityURL: "https://example.com/compat",
+	}
+	matrix := map[string][]string{
+		"1.15": {"1.28", "1.29", "1.30"},
+	}
+
+	result := resolveFromExtractedMatrix(info, matrix, "1.30")
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result.Compatible != output.StatusTrue {
+		t.Errorf("expected StatusTrue, got %q", result.Compatible)
+	}
+	if result.DataSource != output.DataSourceExtracted {
+		t.Errorf("expected data_source=extracted, got %q", result.DataSource)
+	}
+	if !strings.Contains(result.Note, "supports K8s 1.30") {
+		t.Errorf("expected note to contain 'supports K8s 1.30', got %q", result.Note)
+	}
+	if !strings.Contains(result.Note, "Source: https://example.com/compat") {
+		t.Errorf("expected note to contain source URL, got %q", result.Note)
+	}
+}
+
+func TestResolveFromExtractedMatrix_DirectMatch_Incompatible(t *testing.T) {
+	info := addonWithInfo{
+		DetectedAddon: cluster.DetectedAddon{
+			Name:      "cert-manager",
+			Namespace: "cert-manager",
+			Version:   "v1.15.0",
+		},
+		DBMatch: &addon.Addon{Name: "cert-manager"},
+	}
+	matrix := map[string][]string{
+		"1.15": {"1.28", "1.29"},
+	}
+
+	result := resolveFromExtractedMatrix(info, matrix, "1.31")
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result.Compatible != output.StatusFalse {
+		t.Errorf("expected StatusFalse, got %q", result.Compatible)
+	}
+	if result.DataSource != output.DataSourceExtracted {
+		t.Errorf("expected data_source=extracted, got %q", result.DataSource)
+	}
+	if !strings.Contains(result.Note, "does not support") {
+		t.Errorf("expected note to contain 'does not support', got %q", result.Note)
+	}
+}
+
+func TestResolveFromExtractedMatrix_VersionNotInMatrix(t *testing.T) {
+	info := addonWithInfo{
+		DetectedAddon: cluster.DetectedAddon{
+			Name:      "cert-manager",
+			Namespace: "cert-manager",
+			Version:   "v9.99.0",
+		},
+		DBMatch: &addon.Addon{Name: "cert-manager"},
+	}
+	matrix := map[string][]string{
+		"1.15": {"1.28"},
+	}
+
+	result := resolveFromExtractedMatrix(info, matrix, "1.28")
+	if result != nil {
+		t.Errorf("expected nil result when installed version is not in matrix, got %+v", result)
+	}
+}
+
+func TestResolveFromExtractedMatrix_ThresholdMatch(t *testing.T) {
+	info := addonWithInfo{
+		DetectedAddon: cluster.DetectedAddon{
+			Name:      "alb-controller",
+			Namespace: "kube-system",
+			Version:   "v2.11.0",
+		},
+		DBMatch: &addon.Addon{Name: "alb-controller"},
+	}
+	// The "v2.5.0+" key won't direct-match "2.11.0" but will threshold-match
+	// because 2.11.0 >= 2.5.0.
+	matrix := map[string][]string{
+		"v2.5.0+": {"1.29", "1.30", "1.31"},
+	}
+
+	result := resolveFromExtractedMatrix(info, matrix, "1.30")
+	if result == nil {
+		t.Fatal("expected non-nil result for threshold match")
+	}
+	if result.Compatible != output.StatusTrue {
+		t.Errorf("expected StatusTrue, got %q", result.Compatible)
+	}
+	if !strings.Contains(result.Note, "threshold") {
+		t.Errorf("expected note to contain 'threshold', got %q", result.Note)
+	}
+}
+
+func TestResolveFromExtractedMatrix_SourceURLAppended(t *testing.T) {
+	info := addonWithInfo{
+		DetectedAddon: cluster.DetectedAddon{
+			Name:      "cert-manager",
+			Namespace: "cert-manager",
+			Version:   "v1.15.0",
+		},
+		DBMatch:          &addon.Addon{Name: "cert-manager"},
+		CompatibilityURL: "https://cert-manager.io/docs/releases",
+	}
+	matrix := map[string][]string{
+		"1.15": {"1.28", "1.29", "1.30"},
+	}
+
+	result := resolveFromExtractedMatrix(info, matrix, "1.29")
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if !strings.Contains(result.Note, "Source: https://cert-manager.io/docs/releases") {
+		t.Errorf("expected note to end with source URL, got %q", result.Note)
+	}
+}
+
+func TestResolveFromExtractedMatrix_LatestCompatibleVersion(t *testing.T) {
+	info := addonWithInfo{
+		DetectedAddon: cluster.DetectedAddon{
+			Name:      "cert-manager",
+			Namespace: "cert-manager",
+			Version:   "v1.14.0",
+		},
+		DBMatch: &addon.Addon{Name: "cert-manager"},
+	}
+	matrix := map[string][]string{
+		"1.15": {"1.28", "1.29", "1.30"},
+		"1.14": {"1.28", "1.29"},
+		"1.13": {"1.27", "1.28"},
+	}
+
+	// v1.14.0 matches key "1.14", which does NOT include 1.30 → incompatible.
+	// But "1.15" supports 1.30, so LatestCompatibleVersion should be "1.15".
+	result := resolveFromExtractedMatrix(info, matrix, "1.30")
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result.Compatible != output.StatusFalse {
+		t.Errorf("expected StatusFalse, got %q", result.Compatible)
+	}
+	if result.LatestCompatibleVersion != "1.15" {
+		t.Errorf("expected LatestCompatibleVersion=1.15, got %q", result.LatestCompatibleVersion)
+	}
+}
