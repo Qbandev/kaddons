@@ -82,6 +82,11 @@ func TestGitHubRawURL(t *testing.T) {
 			input: "https://github.com/stakater/Reloader/",
 			want:  "https://raw.githubusercontent.com/stakater/Reloader/HEAD/README.md",
 		},
+		{
+			name:  "mixed case github.com host",
+			input: "https://GitHub.com/owner/repo",
+			want:  "https://raw.githubusercontent.com/owner/repo/HEAD/README.md",
+		},
 	}
 
 	for _, tt := range tests {
@@ -189,5 +194,37 @@ func TestNormalizeFetchedContent_UTF8SafeTruncation(t *testing.T) {
 	}
 	if !utf8.ValidString(got) {
 		t.Fatalf("normalizeFetchedContent() produced invalid UTF-8")
+	}
+}
+
+func TestGitHubRawURL_DirectRawURL(t *testing.T) {
+	// A URL that is already raw.githubusercontent.com should not be converted.
+	input := "https://raw.githubusercontent.com/owner/repo/main/README.md"
+	got := GitHubRawURL(input)
+	if got != input {
+		t.Errorf("GitHubRawURL(%q) = %q, want unchanged", input, got)
+	}
+}
+
+func TestIsRawGitHubHost(t *testing.T) {
+	tests := []struct {
+		name string
+		url  string
+		want bool
+	}{
+		{"raw URL", "https://raw.githubusercontent.com/owner/repo/main/README.md", true},
+		{"raw URL mixed case", "https://Raw.Githubusercontent.Com/owner/repo/main/README.md", true},
+		{"raw URL with port", "https://raw.githubusercontent.com:443/owner/repo/main/README.md", true},
+		{"github.com", "https://github.com/owner/repo", false},
+		{"other host", "https://example.com/page", false},
+		{"invalid URL", "://bad", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isRawGitHubHost(tt.url)
+			if got != tt.want {
+				t.Errorf("isRawGitHubHost(%q) = %v, want %v", tt.url, got, tt.want)
+			}
+		})
 	}
 }

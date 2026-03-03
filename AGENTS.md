@@ -23,16 +23,18 @@ The LLM is only used in Phase 3. Phases 1 and 2 are fully deterministic.
 | `cmd/kaddons/main.go` | CLI entrypoint (Cobra), flags |
 | `cmd/kaddons-validate/main.go` | DB validation tool (dev/CI only, not distributed) |
 | `internal/agent/agent.go` | Pipeline orchestration, system prompt, LLM call |
-| `internal/addon/addon.go` | Embedded addon DB (`go:embed`), 6-pass matching algorithm, EOL slugs |
+| `internal/addon/addon.go` | Embedded addon DB (`go:embed`), 7-pass matching algorithm, EOL slugs, disk I/O |
 | `internal/cluster/cluster.go` | kubectl interaction, workload discovery, version detection |
 | `internal/fetch/fetch.go` | HTTP fetching, GitHub raw URL conversion, EOL data |
 | `internal/output/output.go` | JSON/HTML output, `Status` tri-state type, `ExtractJSON` |
 | `internal/validate/validate.go` | DB validation library — URL reachability + matrix content checks |
+| `internal/extract/table.go` | Deterministic Markdown/HTML table extraction for K8s compatibility matrices |
+| `cmd/kaddons-extract/main.go` | Matrix extraction tool with `--sync` mode for CI-driven DB updates |
 | `internal/addon/k8s_universal_addons.json` | 668-addon database (embedded at build time) |
 
 ## Language and stack
 
-- **Go** (1.25.6) — single-binary CLI, no CGO
+- **Go** (1.25.7) — single-binary CLI, no CGO
 - **Dependencies**: `spf13/cobra` (CLI), `google.golang.org/genai` (Gemini API)
 - **No config files** — flags and optional `GEMINI_API_KEY` env var only
 - **CI**: GitHub Actions (test, lint, security scan, release via GoReleaser)
@@ -40,12 +42,15 @@ The LLM is only used in Phase 3. Phases 1 and 2 are fully deterministic.
 ## Build and test
 
 ```bash
+make check                  # Run all local CI checks (vet, lint, test, govulncheck, build, validate)
 make build                  # Build binary with version metadata
 go test -v -race ./...      # Run all tests with race detector
 go vet ./...                # Static analysis
 make validate                           # Check all DB URLs + matrix content (no cluster needed)
 go run ./cmd/kaddons-validate --links   # Only URL reachability
 go run ./cmd/kaddons-validate --matrix  # Only matrix content validation
+make sync                           # Extract compatibility matrices and update addon DB
+make gosec                          # Run gosec security scan (requires Go 1.25.x)
 ```
 
 ## Code conventions
@@ -54,7 +59,7 @@ go run ./cmd/kaddons-validate --matrix  # Only matrix content validation
 - **Output**: progress to stderr, results to stdout (enables piping)
 - **Concurrency**: semaphore pattern with buffered channel (10 workers)
 - **HTTP**: all fetches use `context.Context`, 10-15s timeouts
-- **Matching**: six-pass algorithm in `LookupAddon` — see `internal/addon/addon.go`
+- **Matching**: seven-pass algorithm in `LookupAddon` — see `internal/addon/addon.go`
 - **Status type**: tri-state `"true"` / `"false"` / `"unknown"` (strings, not booleans). Custom `UnmarshalJSON` normalizes LLM output.
 
 ## Important patterns
@@ -91,7 +96,7 @@ The Gemini model sometimes returns booleans instead of strings, or wraps JSON in
 
 ### Modifying the matching algorithm
 
-The six-pass algorithm in `LookupAddon` is order-sensitive — earlier passes take priority. Changes should be tested against the full test suite in `internal/addon/addon_test.go` which covers exact matches, normalization, suffix stripping, prefix matching, and word-subset matching.
+The seven-pass algorithm in `LookupAddon` is order-sensitive — earlier passes take priority. Changes should be tested against the full test suite in `internal/addon/addon_test.go` which covers exact matches, normalization, suffix stripping, prefix matching, word-subset matching, and Levenshtein fuzzy matching.
 
 ### Modifying the LLM prompt
 

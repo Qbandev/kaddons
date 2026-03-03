@@ -2,6 +2,8 @@ package addon
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -639,6 +641,86 @@ func TestAddonJSONRoundTrip_OmitsEmptyStoredData(t *testing.T) {
 	}
 }
 
+func TestLevenshteinDistance(t *testing.T) {
+	tests := []struct {
+		a    string
+		b    string
+		want int
+	}{
+		{"", "", 0},
+		{"abc", "", 3},
+		{"", "abc", 3},
+		{"abc", "abc", 0},
+		{"cert-manager", "cert-manger", 1},
+		{"prometheus", "promethues", 2},
+		{"istio", "istio", 0},
+		{"kitten", "sitting", 3},
+	}
+	for _, tt := range tests {
+		t.Run(tt.a+"_"+tt.b, func(t *testing.T) {
+			got := levenshteinDistance(tt.a, tt.b)
+			if got != tt.want {
+				t.Errorf("levenshteinDistance(%q, %q) = %d, want %d", tt.a, tt.b, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestLookupAddon_LevenshteinFuzzyMatch(t *testing.T) {
+	addons := []Addon{
+		{Name: "cert-manager"},
+		{Name: "Prometheus"},
+		{Name: "Istio"},
+	}
+
+	tests := []struct {
+		input string
+		want  string
+	}{
+		// Typo: "manger" instead of "manager" — distance 1
+		{"cert-manger", "cert-manager"},
+		// Typo: transposed letters — distance 2
+		{"promethues", "Prometheus"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			matches := LookupAddon(tt.input, addons)
+			if len(matches) != 1 {
+				t.Fatalf("LookupAddon(%q) returned %d matches, want 1", tt.input, len(matches))
+			}
+			if matches[0].Name != tt.want {
+				t.Errorf("LookupAddon(%q) = %q, want %q", tt.input, matches[0].Name, tt.want)
+			}
+		})
+	}
+}
+
+func TestLookupAddon_LevenshteinRejectsShortNames(t *testing.T) {
+	addons := []Addon{
+		{Name: "csi"},
+		{Name: "cni"},
+		{Name: "dns"},
+	}
+
+	// Short names should NOT trigger fuzzy matching even if distance is small
+	matches := LookupAddon("cse", addons)
+	if len(matches) != 0 {
+		t.Errorf("LookupAddon(cse) returned %d matches, want 0 (short name reject)", len(matches))
+	}
+}
+
+func TestLookupAddon_LevenshteinRejectsHighDistance(t *testing.T) {
+	addons := []Addon{
+		{Name: "cert-manager"},
+	}
+
+	// "totally-wrong" has high distance to "cert-manager", should not match
+	matches := LookupAddon("totally-wrong", addons)
+	if len(matches) != 0 {
+		t.Errorf("LookupAddon(totally-wrong) returned %d matches, want 0", len(matches))
+	}
+}
+
 func TestVersionMatchesCycle(t *testing.T) {
 	tests := []struct {
 		version string
@@ -660,5 +742,84 @@ func TestVersionMatchesCycle(t *testing.T) {
 				t.Errorf("versionMatchesCycle(%q, %q) = %v, want %v", tt.version, tt.cycle, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestLoadAndSaveAddonsToDisk_RoundTrip(t *testing.T) {
+	original := []Addon{
+		{
+			Name:                   "cert-manager",
+			ProjectURL:             "https://cert-manager.io",
+			Repository:             "https://github.com/cert-manager/cert-manager",
+			CompatibilityMatrixURL: "https://cert-manager.io/docs/releases/",
+			ChangelogLocation:      "https://github.com/cert-manager/cert-manager/releases",
+			KubernetesCompatibility: map[string][]string{
+				"1.15": {"1.28", "1.29", "1.30", "1.31"},
+				"1.14": {"1.27", "1.28", "1.29", "1.30"},
+			},
+		},
+		{
+			Name:                   "Istio",
+			ProjectURL:             "https://istio.io",
+			Repository:             "https://github.com/istio/istio",
+			CompatibilityMatrixURL: "https://istio.io/latest/docs/releases/supported-releases/",
+			ChangelogLocation:      "https://github.com/istio/istio/releases",
+		},
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "test-addons.json")
+
+	if err := SaveAddonsToDisk(path, original); err != nil {
+		t.Fatalf("SaveAddonsToDisk() error: %v", err)
+	}
+
+	loaded, err := LoadAddonsFromDisk(path)
+	if err != nil {
+		t.Fatalf("LoadAddonsFromDisk() error: %v", err)
+	}
+
+	if len(loaded) != len(original) {
+		t.Fatalf("loaded %d addons, want %d", len(loaded), len(original))
+	}
+
+	if loaded[0].Name != "cert-manager" {
+		t.Errorf("loaded[0].Name = %q, want %q", loaded[0].Name, "cert-manager")
+	}
+	if len(loaded[0].KubernetesCompatibility) != 2 {
+		t.Errorf("loaded[0].KubernetesCompatibility has %d entries, want 2", len(loaded[0].KubernetesCompatibility))
+	}
+	if loaded[1].Name != "Istio" {
+		t.Errorf("loaded[1].Name = %q, want %q", loaded[1].Name, "Istio")
+	}
+	if loaded[1].KubernetesCompatibility != nil {
+		t.Errorf("loaded[1].KubernetesCompatibility should be nil, got %v", loaded[1].KubernetesCompatibility)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile() error: %v", err)
+	}
+	if len(data) == 0 || data[len(data)-1] != '\n' {
+		t.Error("saved file should end with newline")
+	}
+}
+
+func TestLoadAddonsFromDisk_NotFound(t *testing.T) {
+	_, err := LoadAddonsFromDisk("/nonexistent/path/addons.json")
+	if err == nil {
+		t.Fatal("LoadAddonsFromDisk() should return error for nonexistent file")
+	}
+}
+
+func TestLoadAddonsFromDisk_InvalidJSON(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bad.json")
+	if err := os.WriteFile(path, []byte("not json"), 0o600); err != nil {
+		t.Fatalf("WriteFile() error: %v", err)
+	}
+	_, err := LoadAddonsFromDisk(path)
+	if err == nil {
+		t.Fatal("LoadAddonsFromDisk() should return error for invalid JSON")
 	}
 }

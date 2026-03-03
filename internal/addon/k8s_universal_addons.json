@@ -5,7 +5,8 @@
       "project_url": "https://github.com/kubeflow/spark-operator",
       "repository": "https://github.com/kubeflow/spark-operator",
       "compatibility_matrix_url": "https://github.com/kubeflow/spark-operator#version-matrix",
-      "changelog_location": "https://github.com/kubeflow/spark-operator/releases"
+      "changelog_location": "https://github.com/kubeflow/spark-operator/releases",
+      "kubernetes_min_version": "1.16"
     },
     {
       "name": "KubeRay",
@@ -273,7 +274,8 @@
       "project_url": "https://argoproj.github.io/argo-events/",
       "repository": "https://github.com/argoproj/argo-events",
       "compatibility_matrix_url": "https://argoproj.github.io/argo-events/installation/",
-      "changelog_location": "https://github.com/argoproj/argo-events/releases"
+      "changelog_location": "https://github.com/argoproj/argo-events/releases",
+      "kubernetes_min_version": "1.11"
     },
     {
       "name": "Argo CD Autopilot",
@@ -547,7 +549,8 @@
       "project_url": "https://github.com/rancher/local-path-provisioner",
       "repository": "https://github.com/rancher/local-path-provisioner",
       "compatibility_matrix_url": "https://github.com/rancher/local-path-provisioner/blob/master/README.md#requirement",
-      "changelog_location": "https://github.com/rancher/local-path-provisioner/releases"
+      "changelog_location": "https://github.com/rancher/local-path-provisioner/releases",
+      "kubernetes_min_version": "1.12"
     },
     {
       "name": "democratic-csi",
@@ -1247,7 +1250,8 @@
       "project_url": "https://ot-redis-operator.netlify.app/",
       "repository": "https://github.com/OT-CONTAINER-KIT/redis-operator",
       "compatibility_matrix_url": "https://ot-redis-operator.netlify.app/docs/installation/",
-      "changelog_location": "https://github.com/OT-CONTAINER-KIT/redis-operator/releases"
+      "changelog_location": "https://github.com/OT-CONTAINER-KIT/redis-operator/releases",
+      "kubernetes_min_version": "1.19"
     },
     {
       "name": "ScyllaDB Operator",
@@ -2934,7 +2938,8 @@
       "project_url": "https://github.com/stakater/Reloader",
       "repository": "https://github.com/stakater/Reloader",
       "compatibility_matrix_url": "https://github.com/stakater/Reloader#compatibility",
-      "changelog_location": "https://github.com/stakater/Reloader/releases"
+      "changelog_location": "https://github.com/stakater/Reloader/releases",
+      "kubernetes_min_version": "1.19"
     },
     {
       "name": "Crane (gocrane)",
@@ -4007,7 +4012,8 @@
       "project_url": "https://sustainable-computing.io/",
       "repository": "https://github.com/sustainable-computing-io/kepler",
       "compatibility_matrix_url": "https://sustainable-computing.io/kepler/installation/guide/",
-      "changelog_location": "https://github.com/sustainable-computing-io/kepler/releases"
+      "changelog_location": "https://github.com/sustainable-computing-io/kepler/releases",
+      "kubernetes_min_version": "1.20"
     },
     {
       "name": "Kiali",
@@ -4335,7 +4341,8 @@
       "project_url": "https://vector.dev/",
       "repository": "https://github.com/vectordotdev/vector",
       "compatibility_matrix_url": "https://vector.dev/docs/setup/installation/platforms/kubernetes/",
-      "changelog_location": "https://github.com/vectordotdev/vector/releases"
+      "changelog_location": "https://github.com/vectordotdev/vector/releases",
+      "kubernetes_min_version": "1.15"
     },
     {
       "name": "VictoriaMetrics",
@@ -4405,7 +4412,8 @@
       "project_url": "https://metacontroller.github.io/metacontroller/",
       "repository": "https://github.com/metacontroller/metacontroller",
       "compatibility_matrix_url": "https://metacontroller.github.io/metacontroller/guide/install.html",
-      "changelog_location": "https://github.com/metacontroller/metacontroller/releases"
+      "changelog_location": "https://github.com/metacontroller/metacontroller/releases",
+      "kubernetes_min_version": "1.17"
     },
     {
       "name": "Kubebuilder",
@@ -4426,7 +4434,8 @@
       "project_url": "https://olm.operatorframework.io/",
       "repository": "https://github.com/operator-framework/operator-lifecycle-manager",
       "compatibility_matrix_url": "https://olm.operatorframework.io/docs/getting-started/",
-      "changelog_location": "https://github.com/operator-framework/operator-lifecycle-manager/releases"
+      "changelog_location": "https://github.com/operator-framework/operator-lifecycle-manager/releases",
+      "kubernetes_min_version": "1.11"
     },
     {
       "name": "Kopf",
@@ -5196,7 +5205,8 @@
       "project_url": "https://github.com/CoHDI",
       "repository": "https://github.com/CoHDI",
       "compatibility_matrix_url": "https://github.com/CoHDI/composable-resource-operator",
-      "changelog_location": "https://github.com/CoHDI"
+      "changelog_location": "https://github.com/CoHDI",
+      "kubernetes_min_version": "1.11"
     },
     {
       "name": "Crossplane",
@@ -5210,7 +5220,8 @@
       "project_url": "https://dolphinscheduler.apache.org",
       "repository": "https://github.com/apache/dolphinscheduler",
       "compatibility_matrix_url": "https://github.com/apache/dolphinscheduler/blob/dev/docs/docs/en/guide/installation/kubernetes.md",
-      "changelog_location": "https://github.com/apache/dolphinscheduler/releases"
+      "changelog_location": "https://github.com/apache/dolphinscheduler/releases",
+      "kubernetes_min_version": "1.12"
     },
     {
       "name": "Eraser",
@@ -5680,7 +5691,8 @@
       "project_url": "https://volcano.sh/",
       "repository": "https://github.com/volcano-sh/volcano",
       "compatibility_matrix_url": "https://volcano.sh/en/docs/installation/#prerequisites",
-      "changelog_location": "https://github.com/volcano-sh/volcano/releases"
+      "changelog_location": "https://github.com/volcano-sh/volcano/releases",
+      "kubernetes_min_version": "1.12"
     },
     {
       "name": "hami",
@@ -6301,7 +6313,8 @@
       "project_url": "https://traefik.io/traefik-mesh",
       "repository": "https://github.com/traefik/mesh",
       "compatibility_matrix_url": "https://doc.traefik.io/traefik-mesh/",
-      "changelog_location": "https://github.com/traefik/mesh/releases"
+      "changelog_location": "https://github.com/traefik/mesh/releases",
+      "kubernetes_min_version": "1.11"
     },
     {
       "name": "BFE",
@@ -7897,7 +7910,8 @@
       "project_url": "https://v6d.io",
       "repository": "https://github.com/v6d-io/v6d",
       "compatibility_matrix_url": "https://v6d.io/notes/cloud-native/vineyard-operator.html",
-      "changelog_location": "https://github.com/v6d-io/v6d/releases"
+      "changelog_location": "https://github.com/v6d-io/v6d/releases",
+      "kubernetes_min_version": "1.19"
     },
     {
       "name": "Zenko",

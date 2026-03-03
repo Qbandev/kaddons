@@ -34,7 +34,7 @@ The addon database is an embedded JSON file (`internal/addon/k8s_universal_addon
 
 ## Matching algorithm
 
-When kaddons discovers a workload in the cluster, it attempts to match the workload name against the database using a six-pass algorithm. See [architecture.md](architecture.md) for full details on each pass.
+When kaddons discovers a workload in the cluster, it attempts to match the workload name against the database using a seven-pass algorithm (including Levenshtein fuzzy matching for typo correction). See [architecture.md](architecture.md) for full details on each pass.
 
 The matching is designed to handle real-world naming inconsistencies:
 - Helm charts use hyphens (`cert-manager`), DB uses spaces (`Cert Manager`)

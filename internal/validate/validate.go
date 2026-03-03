@@ -117,45 +117,45 @@ func applyFlags(tasks map[string]*urlTask, linksOnly, matrixOnly bool) {
 	}
 }
 
-// storedDataProblem records a validation issue with stored compatibility data.
-type storedDataProblem struct {
-	addonName string
-	field     string
-	value     string
-	reason    string
+// StoredDataProblem records a validation issue with stored compatibility data.
+type StoredDataProblem struct {
+	AddonName string
+	Field     string
+	Value     string
+	Reason    string
 }
 
-// validateStoredData checks stored compatibility data for format correctness.
-func validateStoredData(addons []addon.Addon) []storedDataProblem {
-	var problems []storedDataProblem
+// ValidateStoredData checks stored compatibility data for format correctness.
+func ValidateStoredData(addons []addon.Addon) []StoredDataProblem {
+	var problems []StoredDataProblem
 
 	for _, a := range addons {
 		if a.KubernetesMinVersion != "" && !k8sVersionFormat.MatchString(a.KubernetesMinVersion) {
-			problems = append(problems, storedDataProblem{
-				addonName: a.Name,
-				field:     "kubernetes_min_version",
-				value:     a.KubernetesMinVersion,
-				reason:    "must match format X.Y (e.g. 1.28)",
+			problems = append(problems, StoredDataProblem{
+				AddonName: a.Name,
+				Field:     "kubernetes_min_version",
+				Value:     a.KubernetesMinVersion,
+				Reason:    "must match format X.Y (e.g. 1.28)",
 			})
 		}
 
 		if a.KubernetesMaxVersion != "" && !k8sVersionFormat.MatchString(a.KubernetesMaxVersion) {
-			problems = append(problems, storedDataProblem{
-				addonName: a.Name,
-				field:     "kubernetes_max_version",
-				value:     a.KubernetesMaxVersion,
-				reason:    "must match format X.Y (e.g. 1.28)",
+			problems = append(problems, StoredDataProblem{
+				AddonName: a.Name,
+				Field:     "kubernetes_max_version",
+				Value:     a.KubernetesMaxVersion,
+				Reason:    "must match format X.Y (e.g. 1.28)",
 			})
 		}
 
 		if a.KubernetesMinVersion != "" && a.KubernetesMaxVersion != "" &&
 			k8sVersionFormat.MatchString(a.KubernetesMinVersion) && k8sVersionFormat.MatchString(a.KubernetesMaxVersion) {
 			if compareK8sMinorVersions(a.KubernetesMinVersion, a.KubernetesMaxVersion) > 0 {
-				problems = append(problems, storedDataProblem{
-					addonName: a.Name,
-					field:     "kubernetes_min_version / kubernetes_max_version",
-					value:     a.KubernetesMinVersion + " / " + a.KubernetesMaxVersion,
-					reason:    "min version must not exceed max version",
+				problems = append(problems, StoredDataProblem{
+					AddonName: a.Name,
+					Field:     "kubernetes_min_version / kubernetes_max_version",
+					Value:     a.KubernetesMinVersion + " / " + a.KubernetesMaxVersion,
+					Reason:    "min version must not exceed max version",
 				})
 			}
 		}
@@ -164,11 +164,11 @@ func validateStoredData(addons []addon.Addon) []storedDataProblem {
 		nonEmptyCompatibilityKeyCount := 0
 		for key, versions := range a.KubernetesCompatibility {
 			if key == "" {
-				problems = append(problems, storedDataProblem{
-					addonName: a.Name,
-					field:     "kubernetes_compatibility",
-					value:     "(empty key)",
-					reason:    "addon version key must be non-empty",
+				problems = append(problems, StoredDataProblem{
+					AddonName: a.Name,
+					Field:     "kubernetes_compatibility",
+					Value:     "(empty key)",
+					Reason:    "addon version key must be non-empty",
 				})
 				continue
 			}
@@ -177,31 +177,31 @@ func validateStoredData(addons []addon.Addon) []storedDataProblem {
 				supportedCompatibilityKeyCount++
 			}
 			if len(versions) == 0 {
-				problems = append(problems, storedDataProblem{
-					addonName: a.Name,
-					field:     "kubernetes_compatibility",
-					value:     key,
-					reason:    "K8s version list must be non-empty",
+				problems = append(problems, StoredDataProblem{
+					AddonName: a.Name,
+					Field:     "kubernetes_compatibility",
+					Value:     key,
+					Reason:    "K8s version list must be non-empty",
 				})
 				continue
 			}
 			for _, v := range versions {
 				if !k8sVersionFormat.MatchString(v) {
-					problems = append(problems, storedDataProblem{
-						addonName: a.Name,
-						field:     "kubernetes_compatibility[" + key + "]",
-						value:     v,
-						reason:    "K8s version must match format X.Y (e.g. 1.28)",
+					problems = append(problems, StoredDataProblem{
+						AddonName: a.Name,
+						Field:     "kubernetes_compatibility[" + key + "]",
+						Value:     v,
+						Reason:    "K8s version must match format X.Y (e.g. 1.28)",
 					})
 				}
 			}
 		}
 		if nonEmptyCompatibilityKeyCount > 0 && supportedCompatibilityKeyCount == 0 {
-			problems = append(problems, storedDataProblem{
-				addonName: a.Name,
-				field:     "kubernetes_compatibility",
-				value:     "(all keys unsupported)",
-				reason:    "matrix must contain at least one key format supported by stored resolver",
+			problems = append(problems, StoredDataProblem{
+				AddonName: a.Name,
+				Field:     "kubernetes_compatibility",
+				Value:     "(all keys unsupported)",
+				Reason:    "matrix must contain at least one key format supported by stored resolver",
 			})
 		}
 	}
@@ -299,13 +299,13 @@ func compareK8sMinorVersions(a, b string) int {
 }
 
 func validateStoredDataOnly(addons []addon.Addon) error {
-	storedProblems := validateStoredData(addons)
+	storedProblems := ValidateStoredData(addons)
 	if len(storedProblems) > 0 {
 		fmt.Printf("Found **%d** stored compatibility data problems.\n\n", len(storedProblems))
 		fmt.Println("| Addon Name | Field | Value | Reason |")
 		fmt.Println("|------------|-------|-------|--------|")
 		for _, p := range storedProblems {
-			fmt.Printf("| %s | `%s` | %s | %s |\n", p.addonName, p.field, p.value, p.reason)
+			fmt.Printf("| %s | `%s` | %s | %s |\n", p.AddonName, p.Field, p.Value, p.Reason)
 		}
 		fmt.Println()
 		return ErrValidationFailed
@@ -325,14 +325,14 @@ func Run(linksOnly, matrixOnly, storedOnly bool) error {
 		return validateStoredDataOnly(addons)
 	}
 	// Validate stored compatibility data format alongside URL checks.
-	storedProblems := validateStoredData(addons)
+	storedProblems := ValidateStoredData(addons)
 	hasStoredProblems := len(storedProblems) > 0
 	if hasStoredProblems {
 		fmt.Printf("Found **%d** stored compatibility data problems.\n\n", len(storedProblems))
 		fmt.Println("| Addon Name | Field | Value | Reason |")
 		fmt.Println("|------------|-------|-------|--------|")
 		for _, p := range storedProblems {
-			fmt.Printf("| %s | `%s` | %s | %s |\n", p.addonName, p.field, p.value, p.reason)
+			fmt.Printf("| %s | `%s` | %s | %s |\n", p.AddonName, p.Field, p.Value, p.Reason)
 		}
 		fmt.Println()
 	}

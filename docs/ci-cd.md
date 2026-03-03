@@ -54,6 +54,17 @@ Runs every Monday at 08:00 UTC (also manually triggerable).
 
 This catches URL rot in the addon database — projects move, rename repositories, or restructure documentation.
 
+### Weekly DB sync (`db-sync.yml`)
+
+Runs every Wednesday at 10:00 UTC (also manually triggerable).
+
+1. Runs `go run ./cmd/kaddons-extract --sync` to extract compatibility matrices from addon documentation pages
+2. If new matrices are extracted (exit 1): runs tests and stored-data validation, then creates or updates a PR on `chore/db-sync` branch labeled `db-sync`
+3. If no new data (exit 0): closes any open `chore/db-sync` PR
+4. If runtime error (exit 2+): fails the workflow
+
+This automatically enriches the addon database with deterministic table extraction — no LLM needed. The PR contains a summary report listing updated addons, extraction counts, and any skipped entries.
+
 ### Release (`release.yml`)
 
 Triggered on each push to `main`. Single workflow with three chained jobs:
@@ -113,29 +124,33 @@ release-please generates and maintains `CHANGELOG.md` from conventional commit m
 
 ## Local development CI
 
-To run the same checks locally before pushing:
+Run `make check` to execute all CI checks locally before pushing:
 
 ```bash
-# Tests
-go test -v -race ./...
+make check    # vet + lint + test + govulncheck + build + validate
+```
 
-# Vet
-go vet ./...
+This runs the same checks as CI (except gosec, which requires Go 1.25.x due to an SSA analysis incompatibility with Go 1.26). Tool versions are pinned in the Makefile to match CI.
 
-# Lint (requires golangci-lint installed)
-golangci-lint run
+Individual targets:
 
-# Security
-govulncheck ./...
-gosec ./...
+```bash
+make vet              # go vet ./...
+make lint             # golangci-lint (pinned to CI version)
+make test             # go test ./... -race
+make govulncheck      # govulncheck (pinned to CI version)
+make gosec            # gosec (requires Go 1.25.x)
+make build            # CGO_ENABLED=0 build with version metadata
+make validate         # deterministic stored-data validation (no network)
+make validate-live    # live checks (links + matrix content)
+make sync             # extract compatibility matrices and update addon DB
+```
 
-# Validate addon DB (no cluster needed)
-make validate                               # deterministic stored-data validation (no network)
-make validate-live                          # live checks (links + matrix content)
+Manual validation commands:
+
+```bash
 go run ./cmd/kaddons-validate --stored-only # stored-data validation only
 go run ./cmd/kaddons-validate --links       # links only
 go run ./cmd/kaddons-validate --matrix      # matrix only
-
-# Module tidy check
-go mod tidy && git diff --exit-code go.mod go.sum
+go mod tidy && git diff --exit-code go.mod go.sum  # module tidy check
 ```

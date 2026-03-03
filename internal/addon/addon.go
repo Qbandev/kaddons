@@ -4,6 +4,8 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -57,6 +59,39 @@ func LoadAddons() ([]Addon, error) {
 		return nil, fmt.Errorf("parsing embedded addons JSON: %w", err)
 	}
 	return f.Addons, nil
+}
+
+// LoadAddonsFromDisk reads and parses the addon database from a file on disk,
+// as opposed to LoadAddons which reads from the embedded go:embed data.
+func LoadAddonsFromDisk(path string) ([]Addon, error) {
+	path = filepath.Clean(path)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading addon database file: %w", err)
+	}
+	var f addonsFile
+	if err := json.Unmarshal(data, &f); err != nil {
+		return nil, fmt.Errorf("parsing addon database JSON: %w", err)
+	}
+	return f.Addons, nil
+}
+
+// SaveAddonsToDisk writes the addon database to a file on disk.
+// The output format matches the embedded database: 2-space indent JSON with trailing newline.
+func SaveAddonsToDisk(path string, addons []Addon) error {
+	path = filepath.Clean(path)
+
+	f := addonsFile{Addons: addons}
+	data, err := json.MarshalIndent(f, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling addon database: %w", err)
+	}
+	data = append(data, '\n')
+
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return fmt.Errorf("writing addon database: %w", err)
+	}
+	return nil
 }
 
 // addonAliases maps lowercase detected names to lowercase canonical DB names.
@@ -117,6 +152,45 @@ func wordSubsetMatch(subset, superset string) bool {
 		}
 	}
 	return true
+}
+
+// levenshteinDistance computes the edit distance between two strings using the
+// Wagner–Fischer algorithm with O(min(m,n)) space. Operates on runes to
+// handle multi-byte characters correctly.
+func levenshteinDistance(a, b string) int {
+	ra, rb := []rune(a), []rune(b)
+	if len(ra) < len(rb) {
+		ra, rb = rb, ra
+	}
+	if len(rb) == 0 {
+		return len(ra)
+	}
+	prev := make([]int, len(rb)+1)
+	curr := make([]int, len(rb)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(ra); i++ {
+		curr[0] = i
+		for j := 1; j <= len(rb); j++ {
+			cost := 1
+			if ra[i-1] == rb[j-1] {
+				cost = 0
+			}
+			ins := curr[j-1] + 1
+			del := prev[j] + 1
+			sub := prev[j-1] + cost
+			curr[j] = ins
+			if del < curr[j] {
+				curr[j] = del
+			}
+			if sub < curr[j] {
+				curr[j] = sub
+			}
+		}
+		prev, curr = curr, prev
+	}
+	return prev[len(rb)]
 }
 
 type eolSlugAliasGroup struct {
@@ -306,6 +380,42 @@ func (matcher *Matcher) Match(name string) []Addon {
 			}
 		}
 	}
+	if len(matches) > 0 {
+		return matches
+	}
+
+	// Pass 7: Levenshtein fuzzy match — catch typos like "cert-manger" → "cert-manager".
+	// Strict constraints to avoid false positives on short or common names.
+	if len(normalized) >= 6 {
+		bestDist := len(normalized) // worst possible
+		var bestMatch *Addon
+		for i := range matcher.entries {
+			entry := &matcher.entries[i]
+			if len(entry.lowerName) < 6 {
+				continue
+			}
+			dist := levenshteinDistance(normalized, entry.lowerName)
+			if dist > 2 {
+				continue
+			}
+			// Distance must be less than 25% of the shorter name length.
+			baseLen := len(normalized)
+			if l := len(entry.lowerName); l < baseLen {
+				baseLen = l
+			}
+			if dist*4 >= baseLen {
+				continue
+			}
+			if dist < bestDist {
+				bestDist = dist
+				bestMatch = &entry.addon
+			}
+		}
+		if bestMatch != nil {
+			return []Addon{*bestMatch}
+		}
+	}
+
 	return matches
 }
 

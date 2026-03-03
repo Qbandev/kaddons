@@ -9,12 +9,12 @@ kaddons uses a **Plan-and-Execute** architecture that separates deterministic da
 │                      PLAN-AND-EXECUTE PIPELINE                      │
 ├──────────────────┬──────────────────────────────────────────────────┤
 │ Phase 1          │ Discovery (deterministic)                        │
-│ Phase 2          │ Enrichment + stored resolution (deterministic)   │
+│ Phase 2          │ Enrichment + stored resolution + table extraction │
 │ Phase 3          │ Runtime analysis (LLM only when needed)          │
 └──────────────────┴──────────────────────────────────────────────────┘
 ```
 
-Phases 1 and 2 are fully deterministic — the same cluster state always produces the same matched addons and stored-data verdict candidates. The LLM is only used in Phase 3 for addons unresolved by stored data.
+Phases 1 and 2 are fully deterministic — the same cluster state always produces the same matched addons and stored-data verdict candidates. Phase 2 also attempts deterministic table extraction from fetched compatibility pages. The LLM is only used in Phase 3 for addons unresolved by stored data and extraction.
 
 ## Phase 1: Discovery
 
@@ -60,7 +60,7 @@ Deterministic enrichment. No LLM involved.
 
 ### Database matching
 
-Each detected workload is matched against the embedded addon database (668 addons) using a six-pass algorithm (`internal/addon/addon.go:LookupAddon`):
+Each detected workload is matched against the embedded addon database (668 addons) using a seven-pass algorithm (`internal/addon/addon.go:LookupAddon`):
 
 | Pass | Strategy | Example |
 |------|----------|---------|
@@ -71,8 +71,9 @@ Each detected workload is matched against the embedded addon database (668 addon
 | 4 | Forward prefix (DB starts with detected) | `cert` → `cert-manager`, `cert-manager-csi-driver` |
 | 5 | Reverse prefix (detected starts with DB) | `prometheus-operator` → `Prometheus` |
 | 6 | Word-subset (all words of core appear in DB) | `node-exporter` → `Prometheus Node Exporter` |
+| 7 | Levenshtein fuzzy match (distance ≤ 2, < 25% of shorter name) | `cert-manger` → `cert-manager` |
 
-Names shorter than 4 characters skip fuzzy matching (passes 4-6) to avoid false positives.
+Names shorter than 4 characters skip fuzzy matching (passes 4-7) to avoid false positives. Pass 7 additionally requires both the detected and DB names to be at least 6 characters.
 
 Unmatched workloads are silently dropped — they are application workloads, not known addons.
 
@@ -109,6 +110,22 @@ GitHub URL conversion patterns:
 | `github.com/{owner}/{repo}/blob/{ref}/{path}` | `raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}` |
 | Wiki, release, non-GitHub URLs | Unchanged |
 
+### Deterministic table extraction
+
+After fetching compatibility pages and before LLM analysis, the agent attempts deterministic extraction of K8s compatibility matrices from the fetched content (`internal/extract/table.go`). This works without any LLM:
+
+1. **GitHub raw content** (Markdown) is parsed for `|`-delimited tables
+2. **Non-GitHub content** (HTML) is parsed for `<table>` elements using regex-based extraction
+
+Two extraction strategies are applied:
+
+- **Version-header strategy**: Column headers contain K8s version strings directly (e.g., `1.28`, `1.29`). Non-empty cells indicate support.
+- **Labeled-column strategy**: Headers contain labels like "Kubernetes Version" and "Addon Version". Data rows contain version strings.
+
+Extracted versions are validated: K8s versions must match `1.\d+`, addon versions must match semver-like patterns. If extraction produces a valid matrix, the addon is resolved with `data_source="extracted"` and does not proceed to LLM analysis.
+
+Extraction failure (malformed table, no matching columns, validation failure) is not an error — it falls through silently to the LLM/local path. Tables exceeding 1000 cells are discarded entirely (not truncated) to prevent incomplete matrices from producing incorrect verdicts.
+
 ### EOL data fetching
 
 EOL slug resolution uses a runtime catalog from [endoflife.date v1](https://endoflife.date/docs/api/v1/) (`/api/v1/products`) and matches addon names against product slug, label, and aliases. If runtime lookup fails, a static fallback alias map is used for irregular names.
@@ -133,7 +150,7 @@ The system prompt enforces a strict single-object response:
 
 If per-addon analysis fails after bounded retries/timeouts, that addon is emitted as `compatible="unknown"` with an explanatory note so the run always completes without hanging.
 
-Runtime verdicts are tagged with `data_source="llm"`.
+Runtime verdicts are tagged with `data_source="llm"`. Deterministic extraction verdicts are tagged with `data_source="extracted"`.
 
 ### Local-only mode
 
@@ -142,9 +159,9 @@ When no Gemini API key is configured (`GEMINI_API_KEY` unset and `--key` not pro
 - `compatible = "unknown"`, `data_source = "local"`
 - A note built from available local data: EOL latest release info and the compatibility matrix URL from the database
 
-Compatibility page HTTP fetches are also skipped in this mode since the LLM is the only consumer of that content. EOL data fetching still runs because it provides structured data (latest version, EOL status) useful without LLM interpretation. The compatibility URL remains available from the embedded database (`info.DBMatch.CompatibilityMatrixURL`) and is included in the note as a source reference.
+Compatibility page HTTP fetches always run because the fetched content feeds deterministic table extraction (Phase 2), which does not require an LLM. Addons resolved by extraction receive `data_source="extracted"`. EOL data fetching also runs because it provides structured data (latest version, EOL status) useful without LLM interpretation. Only the remaining unresolved addons receive local-only results.
 
-This allows `kaddons` to run to completion without any API key, producing deterministic stored-data results plus `"unknown"` local-only results for unresolved addons.
+This allows `kaddons` to run to completion without any API key, producing deterministic stored-data results, deterministic extraction results, plus `"unknown"` local-only results for remaining unresolved addons.
 
 ### Response processing
 
@@ -197,22 +214,25 @@ A URL returning 200 but failing regex appears only in Table 2. An unreachable ma
 cmd/kaddons/
   main.go                             CLI entrypoint (Cobra), flag parsing
 cmd/kaddons-extract/
-  main.go                             Matrix extraction cache/manifest generator (dev workflow)
+  main.go                             Matrix extraction tool: cache/manifest mode and --sync for CI-driven DB updates
 cmd/kaddons-validate/
   main.go                             DB validation tool (dev/CI only, not distributed)
 
 internal/
   addon/
-    addon.go                          Embedded addon DB, 6-pass matching, EOL slug resolution (runtime+fallback)
-    addon_test.go                     Matching, normalization, EOL tests
+    addon.go                          Embedded addon DB, 7-pass matching, EOL slug resolution (runtime+fallback)
+    addon_test.go                     Matching, normalization, Levenshtein, EOL tests
     k8s_universal_addons.json         668-addon database (embedded via go:embed)
   agent/
-    agent.go                          Plan-and-Execute pipeline: discovery → enrichment → linear per-addon LLM analysis
+    agent.go                          Plan-and-Execute pipeline: discovery → enrichment → extraction → LLM analysis
   cluster/
     cluster.go                        kubectl interaction, version detection, workload discovery
     cluster_test.go                   Chart version, image tag extraction tests
+  extract/
+    table.go                          Deterministic Markdown/HTML table extraction for K8s compatibility matrices
+    table_test.go                     Table extraction tests (version headers, labeled columns, edge cases)
   fetch/
-    fetch.go                          HTTP fetching, GitHub raw URL conversion, EOL data
+    fetch.go                          HTTP fetching, GitHub raw URL conversion, EOL data, FetchedPage
     fetch_test.go                     GitHub URL conversion tests
   resilience/
     retry.go                          Shared retry policy, deterministic backoff, retry classifiers

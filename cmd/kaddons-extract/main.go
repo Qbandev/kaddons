@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -17,11 +18,22 @@ import (
 	"time"
 
 	"github.com/qbandev/kaddons/internal/addon"
+	"github.com/qbandev/kaddons/internal/extract"
 	"github.com/qbandev/kaddons/internal/fetch"
 	"github.com/qbandev/kaddons/internal/validate"
 )
 
 const defaultWorkerCount = 10
+
+type syncUpdateRecord struct {
+	name       string
+	entryCount int
+}
+
+type syncSkipRecord struct {
+	name   string
+	reason string
+}
 
 type fetchResult struct {
 	cacheFilePath  string
@@ -40,13 +52,18 @@ func main() {
 	cacheRootPath := flag.String("cache-root", ".cache/matrix-extract", "Root directory for extracted matrix cache files")
 	workerCount := flag.Int("workers", defaultWorkerCount, "Number of parallel fetch workers")
 	filterFlag := flag.String("filter", "", "Comma-separated addon names to process (case-insensitive substring match)")
+	syncMode := flag.Bool("sync", false, "Extract matrices and write back to addon database JSON")
+	dbPath := flag.String("db-path", "internal/addon/k8s_universal_addons.json", "Path to addon database JSON file")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: kaddons-extract [--cache-root PATH] [--workers N] [--filter NAMES]\n\n")
+		fmt.Fprintf(os.Stderr, "Usage: kaddons-extract [--cache-root PATH] [--workers N] [--filter NAMES]\n")
+		fmt.Fprintf(os.Stderr, "       kaddons-extract --sync [--db-path PATH] [--workers N] [--filter NAMES]\n\n")
 		fmt.Fprintf(os.Stderr, "Fetches compatibility pages for addon matrix URLs,\n")
 		fmt.Fprintf(os.Stderr, "classifies matrix quality, and writes a manifest for extraction subagents.\n\n")
+		fmt.Fprintf(os.Stderr, "With --sync, extracts matrices and writes them back to the addon database.\n\n")
 		fmt.Fprintf(os.Stderr, "Examples:\n")
 		fmt.Fprintf(os.Stderr, "  kaddons-extract --filter cert-manager\n")
-		fmt.Fprintf(os.Stderr, "  kaddons-extract --filter \"cert-manager,karpenter,istio\"\n\n")
+		fmt.Fprintf(os.Stderr, "  kaddons-extract --sync\n")
+		fmt.Fprintf(os.Stderr, "  kaddons-extract --sync --db-path path/to/addons.json\n\n")
 		fmt.Fprintf(os.Stderr, "Flags:\n")
 		flag.PrintDefaults()
 	}
@@ -65,6 +82,11 @@ func main() {
 				filters = append(filters, strings.ToLower(f))
 			}
 		}
+	}
+
+	if *syncMode {
+		exitCode := runSync(*dbPath, *workerCount, filters)
+		os.Exit(exitCode)
 	}
 
 	if err := run(*cacheRootPath, *workerCount, filters); err != nil {
@@ -289,4 +311,213 @@ func writeManifest(manifestPath string, manifestByAddonName map[string]manifestE
 func sha256Hex(value string) string {
 	sum := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(sum[:])
+}
+
+func runSync(dbPath string, workerCount int, filters []string) int {
+	dbPath = filepath.Clean(dbPath)
+	if _, err := os.Stat(dbPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: database file not found: %s\n", dbPath)
+		return 2
+	}
+
+	addons, err := addon.LoadAddonsFromDisk(dbPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		return 2
+	}
+
+	// Filter to candidates: no stored compatibility data and has a compatibility URL
+	type candidate struct {
+		index int
+		url   string
+	}
+	var candidates []candidate
+	urlSet := make(map[string]bool)
+	for i := range addons {
+		if addons[i].HasStoredCompatibility() || addons[i].CompatibilityMatrixURL == "" {
+			continue
+		}
+		if len(filters) > 0 {
+			nameLower := strings.ToLower(addons[i].Name)
+			matched := false
+			for _, f := range filters {
+				if strings.Contains(nameLower, f) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				continue
+			}
+		}
+		candidates = append(candidates, candidate{index: i, url: addons[i].CompatibilityMatrixURL})
+		urlSet[addons[i].CompatibilityMatrixURL] = true
+	}
+
+	if len(candidates) == 0 {
+		fmt.Fprintln(os.Stderr, "No addons without stored data to process.")
+		return 0
+	}
+
+	// Deduplicate URLs for fetching
+	uniqueURLs := make([]string, 0, len(urlSet))
+	for u := range urlSet {
+		uniqueURLs = append(uniqueURLs, u)
+	}
+	sort.Strings(uniqueURLs)
+
+	fmt.Fprintf(os.Stderr, "Candidates: %d addons without stored data\n", len(candidates))
+	fmt.Fprintf(os.Stderr, "Fetching %d unique URLs with %d workers...\n", len(uniqueURLs), workerCount)
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	client := &http.Client{
+		Timeout: 15 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return fmt.Errorf("too many redirects")
+			}
+			return nil
+		},
+	}
+
+	// Fetch pages and extract matrices with worker pool.
+	// Extraction happens inside the worker so the raw page content (up to 2 MB
+	// per URL) is discarded immediately, and each URL is extracted only once
+	// even when multiple addons share the same compatibility page.
+	type pageResult struct {
+		url    string
+		matrix map[string][]string // extracted matrix (nil if extraction failed)
+		err    error               // fetch error
+	}
+	pageResults := make(map[string]pageResult, len(uniqueURLs))
+	var (
+		mu sync.Mutex
+		wg sync.WaitGroup
+	)
+	workQueue := make(chan string, len(uniqueURLs))
+	for _, u := range uniqueURLs {
+		workQueue <- u
+	}
+	close(workQueue)
+
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for pageURL := range workQueue {
+				page, fetchErr := fetch.CompatibilityPageFullWithClient(ctx, client, pageURL)
+				if fetchErr != nil {
+					mu.Lock()
+					pageResults[pageURL] = pageResult{url: pageURL, err: fetchErr}
+					mu.Unlock()
+					continue
+				}
+				var matrix map[string][]string
+				if page.IsRaw {
+					matrix, _ = extract.ExtractMarkdownMatrix(page.Raw)
+				} else {
+					matrix, _ = extract.ExtractHTMLMatrix(page.Raw)
+				}
+				mu.Lock()
+				pageResults[pageURL] = pageResult{url: pageURL, matrix: matrix}
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+
+	// Count fetch results
+	fetchSuccess, fetchFail := 0, 0
+	var fetchFailures []string
+	for _, r := range pageResults {
+		if r.err != nil {
+			fetchFail++
+			fetchFailures = append(fetchFailures, fmt.Sprintf("  - %s: %v", r.url, r.err))
+		} else {
+			fetchSuccess++
+		}
+	}
+	sort.Strings(fetchFailures)
+
+	// Extract matrices and apply to addons
+	var updated []syncUpdateRecord
+	var skipped []syncSkipRecord
+
+	for _, c := range candidates {
+		r, ok := pageResults[c.url]
+		if !ok || r.err != nil || len(r.matrix) == 0 {
+			continue
+		}
+
+		// Tentatively apply and validate
+		original := addons[c.index].KubernetesCompatibility
+		addons[c.index].KubernetesCompatibility = r.matrix
+
+		problems := validate.ValidateStoredData([]addon.Addon{addons[c.index]})
+		if len(problems) > 0 {
+			addons[c.index].KubernetesCompatibility = original
+			skipped = append(skipped, syncSkipRecord{
+				name:   addons[c.index].Name,
+				reason: fmt.Sprintf("%s: %s", problems[0].Field, problems[0].Reason),
+			})
+			continue
+		}
+
+		updated = append(updated, syncUpdateRecord{
+			name:       addons[c.index].Name,
+			entryCount: len(r.matrix),
+		})
+	}
+
+	if len(updated) == 0 {
+		fmt.Fprintln(os.Stderr, "No new data extracted.")
+		printSyncReport(os.Stderr, dbPath, len(candidates), fetchSuccess, fetchFail, updated, skipped, fetchFailures)
+		return 0
+	}
+
+	// Write back
+	if err := addon.SaveAddonsToDisk(dbPath, addons); err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing database: %s\n", err)
+		return 2
+	}
+
+	printSyncReport(os.Stderr, dbPath, len(candidates), fetchSuccess, fetchFail, updated, skipped, fetchFailures)
+	return 1
+}
+
+func printSyncReport(w io.Writer, dbPath string, candidateCount, fetchSuccess, fetchFail int, updated []syncUpdateRecord, skipped []syncSkipRecord, fetchFailures []string) {
+	_, _ = fmt.Fprintln(w, "DB Sync Summary")
+	_, _ = fmt.Fprintf(w, "  Candidates:  %d addons without stored data\n", candidateCount)
+	_, _ = fmt.Fprintf(w, "  Fetched:     %d pages (%d failed)\n", fetchSuccess, fetchFail)
+	_, _ = fmt.Fprintf(w, "  Extracted:   %d new compatibility matrices\n", len(updated)+len(skipped))
+	_, _ = fmt.Fprintf(w, "  Validated:   %d passed, %d skipped (validation errors)\n", len(updated), len(skipped))
+	if len(updated) > 0 {
+		_, _ = fmt.Fprintf(w, "  Updated:     %d addons written to %s\n", len(updated), dbPath)
+	}
+
+	if len(updated) > 0 {
+		_, _ = fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w, "Updated addons:")
+		for _, u := range updated {
+			_, _ = fmt.Fprintf(w, "  - %s: %d version entries\n", u.name, u.entryCount)
+		}
+	}
+
+	if len(skipped) > 0 {
+		_, _ = fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w, "Skipped (validation errors):")
+		for _, s := range skipped {
+			_, _ = fmt.Fprintf(w, "  - %s: %s\n", s.name, s.reason)
+		}
+	}
+
+	if len(fetchFailures) > 0 {
+		_, _ = fmt.Fprintln(w)
+		_, _ = fmt.Fprintln(w, "Fetch failures:")
+		for _, f := range fetchFailures {
+			_, _ = fmt.Fprintln(w, f)
+		}
+	}
 }

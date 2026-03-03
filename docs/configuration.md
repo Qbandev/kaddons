@@ -76,7 +76,7 @@ Default format (`-o json`). Returns a `CompatibilityReport` object:
 | `installed_version` | string | Version detected from cluster labels/images |
 | `compatible` | string | `"true"`, `"false"`, or `"unknown"` |
 | `latest_compatible_version` | string | Recommended version (omitted if not determined) |
-| `data_source` | string | Verdict source: `"stored"`, `"llm"`, or `"local"` (no API key configured) |
+| `data_source` | string | Verdict source: `"stored"`, `"extracted"`, `"llm"`, or `"local"` (no API key configured) |
 | `note` | string | Source-cited explanation with URL and support dates |
 
 The `compatible` field is always a JSON string, never a boolean or null. This is enforced by the `Status` type's custom `UnmarshalJSON` which normalizes LLM output.
