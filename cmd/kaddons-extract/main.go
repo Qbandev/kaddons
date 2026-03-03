@@ -17,11 +17,22 @@ import (
 	"time"
 
 	"github.com/qbandev/kaddons/internal/addon"
+	"github.com/qbandev/kaddons/internal/extract"
 	"github.com/qbandev/kaddons/internal/fetch"
 	"github.com/qbandev/kaddons/internal/validate"
 )
 
 const defaultWorkerCount = 10
+
+type syncUpdateRecord struct {
+	name       string
+	entryCount int
+}
+
+type syncSkipRecord struct {
+	name   string
+	reason string
+}
 
 type fetchResult struct {
 	cacheFilePath  string
@@ -40,6 +51,8 @@ func main() {
 	cacheRootPath := flag.String("cache-root", ".cache/matrix-extract", "Root directory for extracted matrix cache files")
 	workerCount := flag.Int("workers", defaultWorkerCount, "Number of parallel fetch workers")
 	filterFlag := flag.String("filter", "", "Comma-separated addon names to process (case-insensitive substring match)")
+	syncMode := flag.Bool("sync", false, "Extract matrices and write back to addon database JSON")
+	dbPath := flag.String("db-path", "internal/addon/k8s_universal_addons.json", "Path to addon database JSON file")
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: kaddons-extract [--cache-root PATH] [--workers N] [--filter NAMES]\n\n")
 		fmt.Fprintf(os.Stderr, "Fetches compatibility pages for addon matrix URLs,\n")
@@ -55,6 +68,11 @@ func main() {
 	if *workerCount <= 0 {
 		fmt.Fprintln(os.Stderr, "Error: --workers must be greater than zero")
 		os.Exit(2)
+	}
+
+	if *syncMode {
+		exitCode := runSync(*dbPath, *workerCount)
+		os.Exit(exitCode)
 	}
 
 	var filters []string
@@ -289,4 +307,196 @@ func writeManifest(manifestPath string, manifestByAddonName map[string]manifestE
 func sha256Hex(value string) string {
 	sum := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(sum[:])
+}
+
+func runSync(dbPath string, workerCount int) int {
+	dbPath = filepath.Clean(dbPath)
+	if _, err := os.Stat(dbPath); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: database file not found: %s\n", dbPath)
+		return 2
+	}
+
+	addons, err := addon.LoadAddonsFromDisk(dbPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+		return 2
+	}
+
+	// Filter to candidates: no stored compatibility data and has a compatibility URL
+	type candidate struct {
+		index int
+		url   string
+	}
+	var candidates []candidate
+	urlSet := make(map[string]bool)
+	for i := range addons {
+		if addons[i].HasStoredCompatibility() || addons[i].CompatibilityMatrixURL == "" {
+			continue
+		}
+		candidates = append(candidates, candidate{index: i, url: addons[i].CompatibilityMatrixURL})
+		urlSet[addons[i].CompatibilityMatrixURL] = true
+	}
+
+	if len(candidates) == 0 {
+		fmt.Fprintln(os.Stderr, "No addons without stored data to process.")
+		return 0
+	}
+
+	// Deduplicate URLs for fetching
+	uniqueURLs := make([]string, 0, len(urlSet))
+	for u := range urlSet {
+		uniqueURLs = append(uniqueURLs, u)
+	}
+	sort.Strings(uniqueURLs)
+
+	fmt.Fprintf(os.Stderr, "Candidates: %d addons without stored data\n", len(candidates))
+	fmt.Fprintf(os.Stderr, "Fetching %d unique URLs with %d workers...\n", len(uniqueURLs), workerCount)
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	client := &http.Client{
+		Timeout: 15 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return fmt.Errorf("too many redirects")
+			}
+			return nil
+		},
+	}
+
+	// Fetch pages with worker pool
+	type pageResult struct {
+		url  string
+		page fetch.FetchedPage
+		err  error
+	}
+	pageResults := make(map[string]pageResult, len(uniqueURLs))
+	var (
+		mu sync.Mutex
+		wg sync.WaitGroup
+	)
+	workQueue := make(chan string, len(uniqueURLs))
+	for _, u := range uniqueURLs {
+		workQueue <- u
+	}
+	close(workQueue)
+
+	for i := 0; i < workerCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for pageURL := range workQueue {
+				page, fetchErr := fetch.CompatibilityPageFullWithClient(ctx, client, pageURL)
+				mu.Lock()
+				pageResults[pageURL] = pageResult{url: pageURL, page: page, err: fetchErr}
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+
+	// Count fetch results
+	fetchSuccess, fetchFail := 0, 0
+	var fetchFailures []string
+	for _, r := range pageResults {
+		if r.err != nil {
+			fetchFail++
+			fetchFailures = append(fetchFailures, fmt.Sprintf("  - %s: %v", r.url, r.err))
+		} else {
+			fetchSuccess++
+		}
+	}
+	sort.Strings(fetchFailures)
+
+	// Extract matrices and apply to addons
+	var updated []syncUpdateRecord
+	var skipped []syncSkipRecord
+
+	for _, c := range candidates {
+		r, ok := pageResults[c.url]
+		if !ok || r.err != nil {
+			continue
+		}
+
+		var matrix map[string][]string
+		var extractErr error
+		if r.page.IsRaw {
+			matrix, extractErr = extract.ExtractMarkdownMatrix(r.page.Raw)
+		} else {
+			matrix, extractErr = extract.ExtractHTMLMatrix(r.page.Raw)
+		}
+		if extractErr != nil || len(matrix) == 0 {
+			continue
+		}
+
+		// Tentatively apply and validate
+		original := addons[c.index].KubernetesCompatibility
+		addons[c.index].KubernetesCompatibility = matrix
+
+		problems := validate.ValidateStoredData([]addon.Addon{addons[c.index]})
+		if len(problems) > 0 {
+			addons[c.index].KubernetesCompatibility = original
+			skipped = append(skipped, syncSkipRecord{
+				name:   addons[c.index].Name,
+				reason: fmt.Sprintf("%s: %s", problems[0].Field, problems[0].Reason),
+			})
+			continue
+		}
+
+		updated = append(updated, syncUpdateRecord{
+			name:       addons[c.index].Name,
+			entryCount: len(matrix),
+		})
+	}
+
+	if len(updated) == 0 {
+		fmt.Fprintln(os.Stderr, "No new data extracted.")
+		printSyncReport(os.Stderr, len(candidates), fetchSuccess, fetchFail, updated, skipped, fetchFailures)
+		return 0
+	}
+
+	// Write back
+	if err := addon.SaveAddonsToDisk(dbPath, addons); err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing database: %s\n", err)
+		return 2
+	}
+
+	printSyncReport(os.Stderr, len(candidates), fetchSuccess, fetchFail, updated, skipped, fetchFailures)
+	return 1
+}
+
+func printSyncReport(w *os.File, candidateCount, fetchSuccess, fetchFail int, updated []syncUpdateRecord, skipped []syncSkipRecord, fetchFailures []string) {
+	fmt.Fprintln(w, "DB Sync Summary")
+	fmt.Fprintf(w, "  Candidates:  %d addons without stored data\n", candidateCount)
+	fmt.Fprintf(w, "  Fetched:     %d pages (%d failed)\n", fetchSuccess, fetchFail)
+	fmt.Fprintf(w, "  Extracted:   %d new compatibility matrices\n", len(updated)+len(skipped))
+	fmt.Fprintf(w, "  Validated:   %d passed, %d skipped (validation errors)\n", len(updated), len(skipped))
+	if len(updated) > 0 {
+		fmt.Fprintf(w, "  Updated:     %d addons written to %s\n", len(updated), "k8s_universal_addons.json")
+	}
+
+	if len(updated) > 0 {
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Updated addons:")
+		for _, u := range updated {
+			fmt.Fprintf(w, "  - %s: %d version entries\n", u.name, u.entryCount)
+		}
+	}
+
+	if len(skipped) > 0 {
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Skipped (validation errors):")
+		for _, s := range skipped {
+			fmt.Fprintf(w, "  - %s: %s\n", s.name, s.reason)
+		}
+	}
+
+	if len(fetchFailures) > 0 {
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Fetch failures:")
+		for _, f := range fetchFailures {
+			fmt.Fprintln(w, f)
+		}
+	}
 }

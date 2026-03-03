@@ -128,6 +128,12 @@ func CompatibilityPageWithClient(ctx context.Context, client *http.Client, pageU
 	return page.Text, nil
 }
 
+// CompatibilityPageFullWithClient is like CompatibilityPageFull but uses the provided HTTP client,
+// allowing callers to share a client with custom redirect policies or transport settings.
+func CompatibilityPageFullWithClient(ctx context.Context, client *http.Client, pageURL string) (FetchedPage, error) {
+	return fetchPage(ctx, client, pageURL)
+}
+
 func fetchPage(ctx context.Context, client *http.Client, pageURL string) (FetchedPage, error) {
 	if err := ValidatePublicHTTPSURL(pageURL); err != nil {
 		return FetchedPage{}, err

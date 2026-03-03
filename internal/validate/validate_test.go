@@ -401,7 +401,7 @@ func TestLinksOnlyFlag(t *testing.T) {
 	}
 }
 
-// --- validateStoredData tests ---
+// --- ValidateStoredData tests ---
 
 func TestValidateStoredData_ValidFullMatrix(t *testing.T) {
 	addons := []addon.Addon{
@@ -412,7 +412,7 @@ func TestValidateStoredData_ValidFullMatrix(t *testing.T) {
 			},
 		},
 	}
-	problems := validateStoredData(addons)
+	problems := ValidateStoredData(addons)
 	if len(problems) != 0 {
 		t.Fatalf("expected 0 problems, got %d: %+v", len(problems), problems)
 	}
@@ -425,7 +425,7 @@ func TestValidateStoredData_ValidMinVersion(t *testing.T) {
 			KubernetesMinVersion: "1.23",
 		},
 	}
-	problems := validateStoredData(addons)
+	problems := ValidateStoredData(addons)
 	if len(problems) != 0 {
 		t.Fatalf("expected 0 problems, got %d: %+v", len(problems), problems)
 	}
@@ -438,12 +438,12 @@ func TestValidateStoredData_InvalidMinVersion(t *testing.T) {
 			KubernetesMinVersion: "v1.23",
 		},
 	}
-	problems := validateStoredData(addons)
+	problems := ValidateStoredData(addons)
 	if len(problems) != 1 {
 		t.Fatalf("expected 1 problem, got %d: %+v", len(problems), problems)
 	}
-	if problems[0].field != "kubernetes_min_version" {
-		t.Errorf("expected field kubernetes_min_version, got %q", problems[0].field)
+	if problems[0].Field != "kubernetes_min_version" {
+		t.Errorf("expected field kubernetes_min_version, got %q", problems[0].Field)
 	}
 }
 
@@ -456,7 +456,7 @@ func TestValidateStoredData_InvalidK8sVersionInMatrix(t *testing.T) {
 			},
 		},
 	}
-	problems := validateStoredData(addons)
+	problems := ValidateStoredData(addons)
 	if len(problems) != 2 {
 		t.Fatalf("expected 2 problems, got %d: %+v", len(problems), problems)
 	}
@@ -471,12 +471,12 @@ func TestValidateStoredData_EmptyKey(t *testing.T) {
 			},
 		},
 	}
-	problems := validateStoredData(addons)
+	problems := ValidateStoredData(addons)
 	if len(problems) != 1 {
 		t.Fatalf("expected 1 problem, got %d: %+v", len(problems), problems)
 	}
-	if problems[0].reason != "addon version key must be non-empty" {
-		t.Errorf("unexpected reason: %q", problems[0].reason)
+	if problems[0].Reason != "addon version key must be non-empty" {
+		t.Errorf("unexpected reason: %q", problems[0].Reason)
 	}
 }
 
@@ -489,12 +489,12 @@ func TestValidateStoredData_EmptyVersionList(t *testing.T) {
 			},
 		},
 	}
-	problems := validateStoredData(addons)
+	problems := ValidateStoredData(addons)
 	if len(problems) != 1 {
 		t.Fatalf("expected 1 problem, got %d: %+v", len(problems), problems)
 	}
-	if problems[0].reason != "K8s version list must be non-empty" {
-		t.Errorf("unexpected reason: %q", problems[0].reason)
+	if problems[0].Reason != "K8s version list must be non-empty" {
+		t.Errorf("unexpected reason: %q", problems[0].Reason)
 	}
 }
 
@@ -502,7 +502,7 @@ func TestValidateStoredData_NoStoredData(t *testing.T) {
 	addons := []addon.Addon{
 		{Name: "no-data"},
 	}
-	problems := validateStoredData(addons)
+	problems := ValidateStoredData(addons)
 	if len(problems) != 0 {
 		t.Fatalf("expected 0 problems, got %d: %+v", len(problems), problems)
 	}
@@ -517,12 +517,12 @@ func TestValidateStoredData_UnsupportedKeysOnly(t *testing.T) {
 			},
 		},
 	}
-	problems := validateStoredData(addons)
+	problems := ValidateStoredData(addons)
 	if len(problems) != 1 {
 		t.Fatalf("expected 1 problem, got %d: %+v", len(problems), problems)
 	}
-	if problems[0].reason != "matrix must contain at least one key format supported by stored resolver" {
-		t.Fatalf("unexpected reason: %q", problems[0].reason)
+	if problems[0].Reason != "matrix must contain at least one key format supported by stored resolver" {
+		t.Fatalf("unexpected reason: %q", problems[0].Reason)
 	}
 }
 
@@ -536,7 +536,7 @@ func TestValidateStoredData_MixedKeysAtLeastOneSupported(t *testing.T) {
 			},
 		},
 	}
-	problems := validateStoredData(addons)
+	problems := ValidateStoredData(addons)
 	if len(problems) != 0 {
 		t.Fatalf("expected 0 problems, got %d: %+v", len(problems), problems)
 	}
@@ -552,7 +552,7 @@ func TestValidateStoredData_SupportedRangeAndThresholdPlusKeys(t *testing.T) {
 			},
 		},
 	}
-	problems := validateStoredData(addons)
+	problems := ValidateStoredData(addons)
 	if len(problems) != 0 {
 		t.Fatalf("expected 0 problems, got %d: %+v", len(problems), problems)
 	}
@@ -566,7 +566,7 @@ func TestValidateStoredData_ValidMaxVersion(t *testing.T) {
 			KubernetesMaxVersion: "1.28",
 		},
 	}
-	problems := validateStoredData(addons)
+	problems := ValidateStoredData(addons)
 	if len(problems) != 0 {
 		t.Fatalf("expected 0 problems, got %d: %+v", len(problems), problems)
 	}
@@ -579,12 +579,12 @@ func TestValidateStoredData_InvalidMaxVersion(t *testing.T) {
 			KubernetesMaxVersion: "v1.28",
 		},
 	}
-	problems := validateStoredData(addons)
+	problems := ValidateStoredData(addons)
 	if len(problems) != 1 {
 		t.Fatalf("expected 1 problem, got %d: %+v", len(problems), problems)
 	}
-	if problems[0].field != "kubernetes_max_version" {
-		t.Errorf("expected field kubernetes_max_version, got %q", problems[0].field)
+	if problems[0].Field != "kubernetes_max_version" {
+		t.Errorf("expected field kubernetes_max_version, got %q", problems[0].Field)
 	}
 }
 
@@ -596,12 +596,12 @@ func TestValidateStoredData_MinExceedsMax(t *testing.T) {
 			KubernetesMaxVersion: "1.20",
 		},
 	}
-	problems := validateStoredData(addons)
+	problems := ValidateStoredData(addons)
 	if len(problems) != 1 {
 		t.Fatalf("expected 1 problem, got %d: %+v", len(problems), problems)
 	}
-	if problems[0].reason != "min version must not exceed max version" {
-		t.Errorf("unexpected reason: %q", problems[0].reason)
+	if problems[0].Reason != "min version must not exceed max version" {
+		t.Errorf("unexpected reason: %q", problems[0].Reason)
 	}
 }
 
@@ -614,12 +614,12 @@ func TestValidateStoredData_MinExceedsMaxNumeric(t *testing.T) {
 			KubernetesMaxVersion: "1.9",
 		},
 	}
-	problems := validateStoredData(addons)
+	problems := ValidateStoredData(addons)
 	if len(problems) != 1 {
 		t.Fatalf("expected 1 problem for min=1.28 > max=1.9, got %d: %+v", len(problems), problems)
 	}
-	if problems[0].reason != "min version must not exceed max version" {
-		t.Errorf("unexpected reason: %q", problems[0].reason)
+	if problems[0].Reason != "min version must not exceed max version" {
+		t.Errorf("unexpected reason: %q", problems[0].Reason)
 	}
 }
 

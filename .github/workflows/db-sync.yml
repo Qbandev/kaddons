@@ -1,0 +1,93 @@
+name: DB Sync
+
+on:
+  schedule:
+    - cron: "0 10 * * 3"  # Wednesday 10:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: db-sync-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version: '1.25.7'
+          cache: true
+
+      - name: Run matrix extraction sync
+        id: sync
+        run: |
+          set -euo pipefail
+          set +e
+          go run ./cmd/kaddons-extract --sync 2> sync-report.txt
+          status=$?
+          set -e
+          cat sync-report.txt >&2
+          if [ "$status" -eq 0 ]; then
+            echo "changes=false" >> "$GITHUB_OUTPUT"
+          elif [ "$status" -eq 1 ]; then
+            echo "changes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Sync tool runtime failure (exit $status)"
+            cat sync-report.txt
+            exit "$status"
+          fi
+
+      - name: Validate updated database
+        if: steps.sync.outputs.changes == 'true'
+        run: |
+          set -euo pipefail
+          go test ./... -race
+          go run ./cmd/kaddons-validate --stored-only
+
+      - name: Create or update pull request
+        if: steps.sync.outputs.changes == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          BRANCH="chore/db-sync"
+          LABEL="db-sync"
+          TITLE="chore: sync extracted compatibility matrices"
+
+          # Ensure label exists
+          gh label create "$LABEL" --description "Automated DB sync updates" --color "0e8a16" 2>/dev/null || true
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add internal/addon/k8s_universal_addons.json
+          git commit -m "chore: sync extracted compatibility matrices"
+          git push -u origin "$BRANCH" --force-with-lease
+
+          BODY="$(cat sync-report.txt)"$'\n\n'"_Synced: $(date -u '+%Y-%m-%d %H:%M UTC')_"
+
+          EXISTING=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh pr edit "$EXISTING" --body "$BODY"
+            echo "Updated PR #$EXISTING"
+          else
+            gh pr create --title "$TITLE" --label "$LABEL" --body "$BODY"
+          fi
+
+      - name: Close stale pull request
+        if: steps.sync.outputs.changes == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          BRANCH="chore/db-sync"
+          EXISTING=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh pr close "$EXISTING" --comment "No new compatibility data to extract as of $(date -u '+%Y-%m-%d %H:%M UTC'). Closing automatically."
+          fi

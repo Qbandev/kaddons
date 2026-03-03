@@ -4,6 +4,8 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -57,6 +59,53 @@ func LoadAddons() ([]Addon, error) {
 		return nil, fmt.Errorf("parsing embedded addons JSON: %w", err)
 	}
 	return f.Addons, nil
+}
+
+// LoadAddonsFromDisk reads and parses the addon database from a file on disk,
+// as opposed to LoadAddons which reads from the embedded go:embed data.
+func LoadAddonsFromDisk(path string) ([]Addon, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading addon database file: %w", err)
+	}
+	var f addonsFile
+	if err := json.Unmarshal(data, &f); err != nil {
+		return nil, fmt.Errorf("parsing addon database JSON: %w", err)
+	}
+	return f.Addons, nil
+}
+
+// SaveAddonsToDisk writes the addon database to a file on disk using atomic rename.
+// The output format matches the embedded database: 2-space indent JSON with trailing newline.
+func SaveAddonsToDisk(path string, addons []Addon) error {
+	f := addonsFile{Addons: addons}
+	data, err := json.MarshalIndent(f, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling addon database: %w", err)
+	}
+	data = append(data, '\n')
+
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".kaddons-db-*.json")
+	if err != nil {
+		return fmt.Errorf("creating temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmpPath)
+		return fmt.Errorf("writing temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("closing temp file: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("renaming temp file: %w", err)
+	}
+	return nil
 }
 
 // addonAliases maps lowercase detected names to lowercase canonical DB names.
