@@ -453,7 +453,7 @@ func runSync(dbPath string, workerCount int) int {
 
 	if len(updated) == 0 {
 		fmt.Fprintln(os.Stderr, "No new data extracted.")
-		printSyncReport(os.Stderr, len(candidates), fetchSuccess, fetchFail, updated, skipped, fetchFailures)
+		printSyncReport(os.Stderr, dbPath, len(candidates), fetchSuccess, fetchFail, updated, skipped, fetchFailures)
 		return 0
 	}
 
@@ -463,18 +463,18 @@ func runSync(dbPath string, workerCount int) int {
 		return 2
 	}
 
-	printSyncReport(os.Stderr, len(candidates), fetchSuccess, fetchFail, updated, skipped, fetchFailures)
+	printSyncReport(os.Stderr, dbPath, len(candidates), fetchSuccess, fetchFail, updated, skipped, fetchFailures)
 	return 1
 }
 
-func printSyncReport(w io.Writer, candidateCount, fetchSuccess, fetchFail int, updated []syncUpdateRecord, skipped []syncSkipRecord, fetchFailures []string) {
+func printSyncReport(w io.Writer, dbPath string, candidateCount, fetchSuccess, fetchFail int, updated []syncUpdateRecord, skipped []syncSkipRecord, fetchFailures []string) {
 	_, _ = fmt.Fprintln(w, "DB Sync Summary")
 	_, _ = fmt.Fprintf(w, "  Candidates:  %d addons without stored data\n", candidateCount)
 	_, _ = fmt.Fprintf(w, "  Fetched:     %d pages (%d failed)\n", fetchSuccess, fetchFail)
 	_, _ = fmt.Fprintf(w, "  Extracted:   %d new compatibility matrices\n", len(updated)+len(skipped))
 	_, _ = fmt.Fprintf(w, "  Validated:   %d passed, %d skipped (validation errors)\n", len(updated), len(skipped))
 	if len(updated) > 0 {
-		_, _ = fmt.Fprintf(w, "  Updated:     %d addons written to %s\n", len(updated), "k8s_universal_addons.json")
+		_, _ = fmt.Fprintf(w, "  Updated:     %d addons written to %s\n", len(updated), dbPath)
 	}
 
 	if len(updated) > 0 {

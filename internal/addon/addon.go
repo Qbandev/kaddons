@@ -64,7 +64,8 @@ func LoadAddons() ([]Addon, error) {
 // LoadAddonsFromDisk reads and parses the addon database from a file on disk,
 // as opposed to LoadAddons which reads from the embedded go:embed data.
 func LoadAddonsFromDisk(path string) ([]Addon, error) {
-	data, err := os.ReadFile(path) // #nosec G304 -- path comes from CLI flag, sanitized by filepath.Clean in caller
+	path = filepath.Clean(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading addon database file: %w", err)
 	}
@@ -78,6 +79,8 @@ func LoadAddonsFromDisk(path string) ([]Addon, error) {
 // SaveAddonsToDisk writes the addon database to a file on disk using atomic rename.
 // The output format matches the embedded database: 2-space indent JSON with trailing newline.
 func SaveAddonsToDisk(path string, addons []Addon) error {
+	path = filepath.Clean(path)
+
 	f := addonsFile{Addons: addons}
 	data, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
@@ -94,15 +97,15 @@ func SaveAddonsToDisk(path string, addons []Addon) error {
 
 	if _, err := tmp.Write(data); err != nil {
 		_ = tmp.Close()
-		_ = os.Remove(tmpPath) // #nosec G104 -- best-effort cleanup
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("writing temp file: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpPath) // #nosec G104 -- best-effort cleanup
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("closing temp file: %w", err)
 	}
 	if err := os.Rename(tmpPath, path); err != nil {
-		_ = os.Remove(tmpPath) // #nosec G104 -- best-effort cleanup
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("renaming temp file: %w", err)
 	}
 	return nil
