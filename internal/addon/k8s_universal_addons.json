@@ -32,7 +32,7 @@
     },
     {
       "name": "Seldon Core",
-      "project_url": "https://www.seldon.io/solutions/core/",
+      "project_url": "https://github.com/SeldonIO/seldon-core",
       "repository": "https://github.com/SeldonIO/seldon-core",
       "compatibility_matrix_url": "https://docs.seldon.ai/seldon-core-2/installation/installation",
       "changelog_location": "https://github.com/SeldonIO/seldon-core/releases",
@@ -414,7 +414,7 @@
     },
     {
       "name": "Weave Net",
-      "project_url": "https://www.weave.works/oss/net/",
+      "project_url": "https://github.com/rajch/weave",
       "repository": "https://github.com/weaveworks/weave",
       "compatibility_matrix_url": "https://github.com/rajch/weave",
       "changelog_location": "https://github.com/weaveworks/weave/releases"
@@ -1201,9 +1201,9 @@
     },
     {
       "name": "MySQL Operator for Kubernetes",
-      "project_url": "https://dev.mysql.com/doc/mysql-operator/en/mysql-operator-introduction.html",
+      "project_url": "https://github.com/mysql/mysql-operator",
       "repository": "https://github.com/mysql/mysql-operator",
-      "compatibility_matrix_url": "https://dev.mysql.com/doc/mysql-operator/en/mysql-operator-introduction.html",
+      "compatibility_matrix_url": "https://github.com/mysql/mysql-operator",
       "changelog_location": "https://github.com/mysql/mysql-operator/releases"
     },
     {
@@ -3393,7 +3393,7 @@
       "name": "Flipt",
       "project_url": "https://flipt.io",
       "repository": "https://github.com/flipt-io/flipt",
-      "compatibility_matrix_url": "https://docs.flipt.io/operations/deployment",
+      "compatibility_matrix_url": "https://www.flipt.io/docs/configuration/overview",
       "changelog_location": "https://github.com/flipt-io/flipt/releases"
     },
     {
@@ -3499,7 +3499,7 @@
       "name": "Coroot",
       "project_url": "https://coroot.com/",
       "repository": "https://github.com/coroot/coroot",
-      "compatibility_matrix_url": "https://coroot.com/docs/getting-started/kubernetes/",
+      "compatibility_matrix_url": "https://docs.coroot.com/",
       "changelog_location": "https://github.com/coroot/coroot/releases"
     },
     {
@@ -3562,7 +3562,7 @@
     },
     {
       "name": "Fonio",
-      "project_url": "https://ingraind.org/",
+      "project_url": "https://github.com/foniod/foniod",
       "repository": "https://github.com/foniod/foniod",
       "compatibility_matrix_url": "https://github.com/foniod/foniod#supported-platforms",
       "changelog_location": "https://github.com/foniod/foniod/releases"
@@ -4226,7 +4226,7 @@
       "name": "Pinpoint",
       "project_url": "https://pinpoint-apm.github.io/pinpoint/",
       "repository": "https://github.com/pinpoint-apm/pinpoint",
-      "compatibility_matrix_url": "https://pinpoint-apm.gitbook.io/pinpoint/getting-started/supported-modules",
+      "compatibility_matrix_url": "https://github.com/pinpoint-apm/pinpoint-kubernetes",
       "changelog_location": "https://github.com/pinpoint-apm/pinpoint/releases"
     },
     {
@@ -4289,9 +4289,9 @@
     },
     {
       "name": "SigLens",
-      "project_url": "https://www.siglens.com/",
+      "project_url": "https://github.com/siglens/siglens",
       "repository": "https://github.com/siglens/siglens",
-      "compatibility_matrix_url": "https://www.siglens.com/index.html",
+      "compatibility_matrix_url": "https://siglens.github.io/siglens-docs/installation/helm",
       "changelog_location": "https://github.com/siglens/siglens/releases"
     },
     {
@@ -6518,7 +6518,7 @@
     },
     {
       "name": "NGINX",
-      "project_url": "https://www.nginx.com/",
+      "project_url": "https://nginx.org/",
       "repository": "https://github.com/nginx/nginx",
       "compatibility_matrix_url": "https://docs.nginx.com/nginx/releases/",
       "changelog_location": "https://nginx.org/en/CHANGES"
@@ -7177,7 +7177,7 @@
     },
     {
       "name": "ThreatMapper",
-      "project_url": "https://deepfence.io/threatmapper/",
+      "project_url": "https://github.com/deepfence/ThreatMapper",
       "repository": "https://github.com/deepfence/ThreatMapper",
       "compatibility_matrix_url": "https://github.com/deepfence/ThreatMapper/blob/master/README.md",
       "changelog_location": "https://github.com/deepfence/ThreatMapper/releases"
