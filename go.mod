@@ -1,6 +1,6 @@
 module github.com/qbandev/kaddons
 
-go 1.25.7
+go 1.25.8
 
 require (
 	github.com/spf13/cobra v1.10.2
