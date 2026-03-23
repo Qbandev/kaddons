@@ -1,21 +1,13 @@
-# Security Policy
-
 ## Supported Versions
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+This project ships official releases as **Git tags / GitHub Releases** (e.g. `vX.Y.Z`) created from the `main` branch by Release Please and built/published by GoReleaser.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+Security fixes are provided for:
+- **The latest tagged release**, and
+- **`main`** (unreleased), until the next release is cut.
 
-## Reporting a Vulnerability
-
-Use this section to tell people how to report a vulnerability.
-
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+| Version | Supported |
+| ------- | --------- |
+| Latest GitHub Release tag (e.g. `vX.Y.Z`) | ✅ |
+| `main` (unreleased) | ✅ |
+| Older releases | ❌ |
