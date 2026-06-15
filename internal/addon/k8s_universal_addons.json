@@ -3420,9 +3420,9 @@
     {
       "name": "Grafana OnCall",
       "project_url": "https://github.com/grafana-cold-storage/oncall",
-      "repository": "https://github.com/grafana/oncall",
+      "repository": "https://github.com/grafana-cold-storage/oncall",
       "compatibility_matrix_url": "https://github.com/grafana-cold-storage/oncall/blob/main/helm/README.md",
-      "changelog_location": "https://github.com/grafana/oncall/releases"
+      "changelog_location": "https://github.com/grafana-cold-storage/oncall/releases"
     },
     {
       "name": "Fluent Bit",
@@ -4311,9 +4311,9 @@
     {
       "name": "Spring Cloud Sleuth",
       "project_url": "https://github.com/spring-attic/spring-cloud-sleuth",
-      "repository": "https://github.com/spring-cloud/spring-cloud-sleuth",
+      "repository": "https://github.com/spring-attic/spring-cloud-sleuth",
       "compatibility_matrix_url": "https://github.com/spring-attic/spring-cloud-sleuth/blob/3.1.x/README.adoc",
-      "changelog_location": "https://github.com/spring-cloud/spring-cloud-sleuth/releases"
+      "changelog_location": "https://github.com/spring-attic/spring-cloud-sleuth/releases"
     },
     {
       "name": "Thanos",
@@ -5513,7 +5513,7 @@
       "name": "KubeStellar",
       "project_url": "https://github.com/kubestellar/kubestellar",
       "repository": "https://github.com/kubestellar/kubestellar",
-      "compatibility_matrix_url": "https://github.com/kubestellar/kubestellar/blob/main/docs/to-be-deleted/content/direct/pre-reqs.md",
+      "compatibility_matrix_url": "https://github.com/kubestellar/docs/blob/main/docs/content/kubestellar/pre-reqs.md",
       "changelog_location": "https://github.com/kubestellar/kubestellar/releases",
       "kubernetes_min_version": "1.34"
     },

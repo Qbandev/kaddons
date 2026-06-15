@@ -52,7 +52,9 @@ func TestLoadAddons_UsesUpdatedBrokenLinkReplacements(t *testing.T) {
 		},
 		"Grafana OnCall": {
 			projectURL:             "https://github.com/grafana-cold-storage/oncall",
+			repository:             "https://github.com/grafana-cold-storage/oncall",
 			compatibilityMatrixURL: "https://github.com/grafana-cold-storage/oncall/blob/main/helm/README.md",
+			changelogLocation:      "https://github.com/grafana-cold-storage/oncall/releases",
 		},
 		"KubeSlice": {
 			projectURL:             "https://github.com/kubeslice/kubeslice",
@@ -60,7 +62,7 @@ func TestLoadAddons_UsesUpdatedBrokenLinkReplacements(t *testing.T) {
 		},
 		"KubeStellar": {
 			projectURL:             "https://github.com/kubestellar/kubestellar",
-			compatibilityMatrixURL: "https://github.com/kubestellar/kubestellar/blob/main/docs/to-be-deleted/content/direct/pre-reqs.md",
+			compatibilityMatrixURL: "https://github.com/kubestellar/docs/blob/main/docs/content/kubestellar/pre-reqs.md",
 		},
 		"OpenIO": {
 			projectURL:             "https://github.com/gdelaporte/oio-sds",
@@ -73,7 +75,9 @@ func TestLoadAddons_UsesUpdatedBrokenLinkReplacements(t *testing.T) {
 		},
 		"Spring Cloud Sleuth": {
 			projectURL:             "https://github.com/spring-attic/spring-cloud-sleuth",
+			repository:             "https://github.com/spring-attic/spring-cloud-sleuth",
 			compatibilityMatrixURL: "https://github.com/spring-attic/spring-cloud-sleuth/blob/3.1.x/README.adoc",
+			changelogLocation:      "https://github.com/spring-attic/spring-cloud-sleuth/releases",
 		},
 		"StackRox": {
 			projectURL:             "https://github.com/stackrox/stackrox",
