@@ -34,7 +34,7 @@ The LLM is only used in Phase 3. Phases 1 and 2 are fully deterministic.
 
 ## Language and stack
 
-- **Go** (1.25.7) — single-binary CLI, no CGO
+- **Go** (1.25.11) — single-binary CLI, no CGO
 - **Dependencies**: `spf13/cobra` (CLI), `google.golang.org/genai` (Gemini API)
 - **No config files** — flags and optional `GEMINI_API_KEY` env var only
 - **CI**: GitHub Actions (test, lint, security scan, release via GoReleaser)
