@@ -23,6 +23,93 @@ func TestLoadAddons(t *testing.T) {
 	}
 }
 
+func TestLoadAddons_UsesUpdatedBrokenLinkReplacements(t *testing.T) {
+	addons, err := LoadAddons()
+	if err != nil {
+		t.Fatalf("LoadAddons() error: %v", err)
+	}
+
+	expected := map[string]struct {
+		projectURL             string
+		repository             string
+		compatibilityMatrixURL string
+		changelogLocation      string
+	}{
+		"Admiralty": {
+			projectURL:             "https://github.com/admiraltyio/admiralty",
+			compatibilityMatrixURL: "https://github.com/admiraltyio/admiralty/blob/master/docs/operator_guide/installation.md",
+		},
+		"APIClarity": {
+			projectURL: "https://github.com/openclarity/apiclarity",
+		},
+		"Centreon": {
+			projectURL:             "https://github.com/centreon/centreon",
+			compatibilityMatrixURL: "https://github.com/centreon/centreon#readme",
+		},
+		"Gefyra": {
+			projectURL:             "https://github.com/gefyrahq/gefyra",
+			compatibilityMatrixURL: "https://github.com/gefyrahq/gefyra#readme",
+		},
+		"Grafana OnCall": {
+			projectURL:             "https://github.com/grafana-cold-storage/oncall",
+			repository:             "https://github.com/grafana-cold-storage/oncall",
+			compatibilityMatrixURL: "https://github.com/grafana-cold-storage/oncall/blob/main/helm/README.md",
+			changelogLocation:      "https://github.com/grafana-cold-storage/oncall/releases",
+		},
+		"KubeSlice": {
+			projectURL:             "https://github.com/kubeslice/kubeslice",
+			compatibilityMatrixURL: "https://github.com/kubeslice/kubeslice/blob/master/charts/cert-manager/README.md",
+		},
+		"KubeStellar": {
+			projectURL:             "https://github.com/kubestellar/kubestellar",
+			compatibilityMatrixURL: "https://github.com/kubestellar/docs/blob/main/docs/content/kubestellar/pre-reqs.md",
+		},
+		"OpenIO": {
+			projectURL:             "https://github.com/gdelaporte/oio-sds",
+			repository:             "https://github.com/gdelaporte/oio-sds",
+			compatibilityMatrixURL: "https://github.com/gdelaporte/oio-sds#readme",
+			changelogLocation:      "https://github.com/gdelaporte/oio-sds/commits/master",
+		},
+		"SigLens": {
+			compatibilityMatrixURL: "https://github.com/siglens/siglens/blob/main/static/kubernetes-overview.html",
+		},
+		"Spring Cloud Sleuth": {
+			projectURL:             "https://github.com/spring-attic/spring-cloud-sleuth",
+			repository:             "https://github.com/spring-attic/spring-cloud-sleuth",
+			compatibilityMatrixURL: "https://github.com/spring-attic/spring-cloud-sleuth/blob/3.1.x/README.adoc",
+			changelogLocation:      "https://github.com/spring-attic/spring-cloud-sleuth/releases",
+		},
+		"StackRox": {
+			projectURL:             "https://github.com/stackrox/stackrox",
+			compatibilityMatrixURL: "https://github.com/stackrox/stackrox/blob/master/deploy/README.md",
+		},
+	}
+
+	byName := make(map[string]Addon, len(addons))
+	for _, addon := range addons {
+		byName[addon.Name] = addon
+	}
+
+	for name, want := range expected {
+		addon, ok := byName[name]
+		if !ok {
+			t.Fatalf("addon %q not found in embedded database", name)
+		}
+		if want.projectURL != "" && addon.ProjectURL != want.projectURL {
+			t.Errorf("%s ProjectURL = %q, want %q", name, addon.ProjectURL, want.projectURL)
+		}
+		if want.repository != "" && addon.Repository != want.repository {
+			t.Errorf("%s Repository = %q, want %q", name, addon.Repository, want.repository)
+		}
+		if want.compatibilityMatrixURL != "" && addon.CompatibilityMatrixURL != want.compatibilityMatrixURL {
+			t.Errorf("%s CompatibilityMatrixURL = %q, want %q", name, addon.CompatibilityMatrixURL, want.compatibilityMatrixURL)
+		}
+		if want.changelogLocation != "" && addon.ChangelogLocation != want.changelogLocation {
+			t.Errorf("%s ChangelogLocation = %q, want %q", name, addon.ChangelogLocation, want.changelogLocation)
+		}
+	}
+}
+
 func TestEmbeddedDatabase_DoesNotContainUpgradePathType(t *testing.T) {
 	if strings.Contains(string(addonsJSON), "\"upgrade_path_type\"") {
 		t.Fatal("embedded addon database should not include upgrade_path_type")
