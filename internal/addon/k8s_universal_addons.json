@@ -1475,9 +1475,9 @@
     },
     {
       "name": "Gefyra",
-      "project_url": "https://gefyra.dev/",
+      "project_url": "https://github.com/gefyrahq/gefyra",
       "repository": "https://github.com/gefyrahq/gefyra",
-      "compatibility_matrix_url": "https://gefyra.dev/getting-started/",
+      "compatibility_matrix_url": "https://github.com/gefyrahq/gefyra#readme",
       "changelog_location": "https://github.com/gefyrahq/gefyra/releases"
     },
     {
@@ -2388,9 +2388,9 @@
     },
     {
       "name": "Admiralty",
-      "project_url": "https://admiralty.io/",
+      "project_url": "https://github.com/admiraltyio/admiralty",
       "repository": "https://github.com/admiraltyio/admiralty",
-      "compatibility_matrix_url": "https://admiralty.io/docs/operator_guide/installation#prerequisites",
+      "compatibility_matrix_url": "https://github.com/admiraltyio/admiralty/blob/master/docs/operator_guide/installation.md",
       "changelog_location": "https://github.com/admiraltyio/admiralty/releases"
     },
     {
@@ -3419,10 +3419,10 @@
     },
     {
       "name": "Grafana OnCall",
-      "project_url": "https://grafana.com/products/oncall/",
-      "repository": "https://github.com/grafana/oncall",
-      "compatibility_matrix_url": "https://grafana.com/docs/oncall/latest/set-up/open-source/",
-      "changelog_location": "https://github.com/grafana/oncall/releases"
+      "project_url": "https://github.com/grafana-cold-storage/oncall",
+      "repository": "https://github.com/grafana-cold-storage/oncall",
+      "compatibility_matrix_url": "https://github.com/grafana-cold-storage/oncall/blob/main/helm/README.md",
+      "changelog_location": "https://github.com/grafana-cold-storage/oncall/releases"
     },
     {
       "name": "Fluent Bit",
@@ -3483,9 +3483,9 @@
     },
     {
       "name": "Centreon",
-      "project_url": "https://www.centreon.com/",
+      "project_url": "https://github.com/centreon/centreon",
       "repository": "https://github.com/centreon/centreon",
-      "compatibility_matrix_url": "https://docs.centreon.com/docs/installation/compatibility/",
+      "compatibility_matrix_url": "https://github.com/centreon/centreon#readme",
       "changelog_location": "https://github.com/centreon/centreon/releases"
     },
     {
@@ -4291,7 +4291,7 @@
       "name": "SigLens",
       "project_url": "https://github.com/siglens/siglens",
       "repository": "https://github.com/siglens/siglens",
-      "compatibility_matrix_url": "https://siglens.github.io/siglens-docs/installation/helm",
+      "compatibility_matrix_url": "https://github.com/siglens/siglens/blob/main/static/kubernetes-overview.html",
       "changelog_location": "https://github.com/siglens/siglens/releases"
     },
     {
@@ -4310,10 +4310,10 @@
     },
     {
       "name": "Spring Cloud Sleuth",
-      "project_url": "https://spring.io/projects/spring-cloud-sleuth",
-      "repository": "https://github.com/spring-cloud/spring-cloud-sleuth",
-      "compatibility_matrix_url": "https://spring.io/projects/spring-cloud-sleuth#support",
-      "changelog_location": "https://github.com/spring-cloud/spring-cloud-sleuth/releases"
+      "project_url": "https://github.com/spring-attic/spring-cloud-sleuth",
+      "repository": "https://github.com/spring-attic/spring-cloud-sleuth",
+      "compatibility_matrix_url": "https://github.com/spring-attic/spring-cloud-sleuth/blob/3.1.x/README.adoc",
+      "changelog_location": "https://github.com/spring-attic/spring-cloud-sleuth/releases"
     },
     {
       "name": "Thanos",
@@ -5498,9 +5498,9 @@
     },
     {
       "name": "KubeSlice",
-      "project_url": "https://kubeslice.io",
+      "project_url": "https://github.com/kubeslice/kubeslice",
       "repository": "https://github.com/kubeslice/kubeslice",
-      "compatibility_matrix_url": "https://kubeslice.io/documentation/open-source/1.4.0/get-started/prerequisites/prerequisites-worker-cluster-requirements/",
+      "compatibility_matrix_url": "https://github.com/kubeslice/kubeslice/blob/master/charts/cert-manager/README.md",
       "changelog_location": "https://github.com/kubeslice/kubeslice/releases",
       "kubernetes_compatibility": {
         "1.4.0": [
@@ -5511,9 +5511,9 @@
     },
     {
       "name": "KubeStellar",
-      "project_url": "https://kubestellar.io",
+      "project_url": "https://github.com/kubestellar/kubestellar",
       "repository": "https://github.com/kubestellar/kubestellar",
-      "compatibility_matrix_url": "https://docs.kubestellar.io/stable/direct/pre-reqs/",
+      "compatibility_matrix_url": "https://github.com/kubestellar/docs/blob/main/docs/content/kubestellar/pre-reqs.md",
       "changelog_location": "https://github.com/kubestellar/kubestellar/releases",
       "kubernetes_min_version": "1.34"
     },
@@ -6704,7 +6704,7 @@
     },
     {
       "name": "APIClarity",
-      "project_url": "https://openclarity.io/",
+      "project_url": "https://github.com/openclarity/apiclarity",
       "repository": "https://github.com/openclarity/apiclarity",
       "compatibility_matrix_url": "https://github.com/openclarity/apiclarity#prerequisites",
       "changelog_location": "https://github.com/openclarity/apiclarity/releases"
@@ -7135,9 +7135,9 @@
     },
     {
       "name": "StackRox",
-      "project_url": "https://www.stackrox.io/",
+      "project_url": "https://github.com/stackrox/stackrox",
       "repository": "https://github.com/stackrox/stackrox",
-      "compatibility_matrix_url": "https://docs.openshift.com/acs/installing/acs-default-requirements.html",
+      "compatibility_matrix_url": "https://github.com/stackrox/stackrox/blob/master/deploy/README.md",
       "changelog_location": "https://github.com/stackrox/stackrox/releases"
     },
     {
@@ -7850,10 +7850,10 @@
     },
     {
       "name": "OpenIO",
-      "project_url": "https://docs.openio.io/",
-      "repository": "https://github.com/open-io/oio-sds",
-      "compatibility_matrix_url": "https://github.com/open-io/oio-sds#readme",
-      "changelog_location": "https://github.com/open-io/oio-sds/releases"
+      "project_url": "https://github.com/gdelaporte/oio-sds",
+      "repository": "https://github.com/gdelaporte/oio-sds",
+      "compatibility_matrix_url": "https://github.com/gdelaporte/oio-sds#readme",
+      "changelog_location": "https://github.com/gdelaporte/oio-sds/commits/master"
     },
     {
       "name": "Piraeus Datastore",
